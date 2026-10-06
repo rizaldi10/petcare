@@ -1,0 +1,192 @@
+/* Portal Pelanggan PetCare Stylesheet */
+:root {
+    --portal-primary: #0284c7;
+    --portal-primary-dark: #0369a1;
+    --portal-accent: #f59e0b;
+    --portal-bg: #f8fafc;
+    --portal-text: #1e293b;
+    --portal-card-bg: #ffffff;
+    --portal-border: #e2e8f0;
+}
+
+body.portal-body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--portal-bg);
+    color: var(--portal-text);
+    line-height: 1.5;
+}
+
+.portal-nav {
+    background: #ffffff;
+    border-bottom: 1px solid var(--portal-border);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.portal-logo {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--portal-primary);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.portal-menu {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.portal-link {
+    text-decoration: none;
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.portal-link:hover, .portal-link.active {
+    color: var(--portal-primary);
+    background: #f0f9ff;
+}
+
+.portal-container {
+    max-width: 1000px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+
+.portal-card {
+    background: var(--portal-card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--portal-border);
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04);
+    margin-bottom: 24px;
+}
+
+.portal-btn {
+    display: inline-block;
+    background: var(--portal-primary);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.portal-btn:hover {
+    background: var(--portal-primary-dark);
+}
+
+.portal-btn-secondary {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.portal-btn-secondary:hover {
+    background: #cbd5e1;
+}
+
+/* Tracking Stepper */
+.stepper {
+    display: flex;
+    justify-content: space-between;
+    margin: 25px 0;
+    position: relative;
+}
+
+.stepper::before {
+    content: '';
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    height: 4px;
+    background: #e2e8f0;
+    z-index: 1;
+}
+
+.step-item {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    flex: 1;
+}
+
+.step-circle {
+    width: 44px;
+    height: 44px;
+    background: white;
+    border: 3px solid #cbd5e1;
+    border-radius: 50%;
+    margin: 0 auto 8px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #94a3b8;
+    transition: all 0.3s;
+}
+
+.step-item.completed .step-circle {
+    border-color: #10b981;
+    background: #10b981;
+    color: white;
+}
+
+.step-item.active .step-circle {
+    border-color: var(--portal-primary);
+    background: #0284c7;
+    color: white;
+    box-shadow: 0 0 0 5px rgba(2, 132, 199, 0.2);
+}
+
+.step-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.step-item.active .step-label {
+    color: var(--portal-primary);
+    font-weight: bold;
+}
+
+.step-item.completed .step-label {
+    color: #10b981;
+}
+
+@media (max-width: 640px) {
+    .portal-menu {
+        gap: 8px;
+    }
+    .portal-link {
+        font-size: 0.85rem;
+        padding: 4px 8px;
+    }
+    .step-circle {
+        width: 36px;
+        height: 36px;
+        font-size: 0.9rem;
+    }
+    .step-label {
+        font-size: 0.75rem;
+    }
+}
