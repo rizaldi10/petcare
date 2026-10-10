@@ -119,9 +119,11 @@ CREATE TABLE IF NOT EXISTS antrean_grooming (
     waktu_masuk DATETIME NOT NULL,
     waktu_selesai DATETIME NULL,
     catatan_kondisi TEXT NULL,
+    id_penjualan INT NULL,
     FOREIGN KEY (id_hewan) REFERENCES hewan_peliharaan(id_hewan) ON DELETE RESTRICT,
     FOREIGN KEY (id_groomer) REFERENCES users(id_user) ON DELETE RESTRICT,
-    FOREIGN KEY (id_barang_layanan) REFERENCES barang(id_barang) ON DELETE RESTRICT
+    FOREIGN KEY (id_barang_layanan) REFERENCES barang(id_barang) ON DELETE RESTRICT,
+    FOREIGN KEY (id_penjualan) REFERENCES penjualan(id_penjualan) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- 11. Log Konversi Repack Pakan & Susut

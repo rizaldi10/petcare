@@ -117,6 +117,21 @@ class Grooming {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
+    public function getPendingPaymentQueues() {
+        $query = "SELECT g.id_grooming, g.id_hewan, g.id_groomer, g.id_barang_layanan,
+                         g.catatan_kondisi, g.status_pengerjaan,
+                         h.nama_hewan, h.id_customer, c.nama_customer, c.telepon,
+                         u.nama AS nama_groomer, b.nama_barang, b.harga_jual
+                  FROM " . $this->table_name . " g
+                  JOIN hewan_peliharaan h ON g.id_hewan = h.id_hewan
+                  JOIN customer c ON h.id_customer = c.id_customer
+                  JOIN users u ON g.id_groomer = u.id_user
+                  JOIN barang b ON g.id_barang_layanan = b.id_barang
+                  WHERE g.id_penjualan IS NULL
+                  ORDER BY g.waktu_masuk ASC";
+        return $this->conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function recordCommission($id_groomer, $id_penjualan, $id_barang_layanan, $harga_satuan, $persen = 20) {
         $nominal = ($harga_satuan * $persen) / 100;
         $query = "INSERT INTO komisi_groomer 

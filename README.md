@@ -35,7 +35,7 @@ portal/       halaman pelanggan
 
 1. Pasang PHP 8+, ekstensi PDO MySQL, dan MySQL/MariaDB. Laragon atau XAMPP dapat digunakan.
 2. Salin proyek ke document root web server, misalnya `C:\laragon\www\petcare`.
-3. Sesuaikan host, nama database, username, dan password di `config/database.php`. Installer memakai koneksi lokal `root` tanpa password dan database `petcare_db`; ubah nilai di `install.php` juga bila lingkungan Anda berbeda.
+3. Untuk lokal, koneksi default memakai `localhost`, database `petcare_db`, user `root`, tanpa password. Nilai dapat diubah dengan environment variables `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, dan `DB_PASSWORD`.
 4. Jalankan MySQL dan Apache, lalu buka `http://localhost/petcare/install.php` untuk membuat database dan memuat skema serta seed awal.
 5. Buka aplikasi:
    - Beranda: `http://localhost/petcare/`
@@ -43,6 +43,14 @@ portal/       halaman pelanggan
    - Portal pelanggan: `http://localhost/petcare/portal/index.php`
 
 `BASE_URL` ditetapkan di `config/config.php` ke `http://localhost/petcare/`. Sesuaikan bila nama host atau jalur pemasangan berbeda.
+
+## Deploy di Railway
+
+Railway mendeteksi `Dockerfile` di root proyek. Image memasang ekstensi `pdo_mysql` dan `mysqli`, lalu Apache mendengarkan port dari variabel `PORT`. Tambahkan service MySQL Railway dan hubungkan service aplikasi ke service database. Koneksi otomatis membaca `MYSQLHOST`, `MYSQLPORT`, `MYSQLDATABASE`, `MYSQLUSER`, dan `MYSQLPASSWORD` yang disediakan Railway; variabel `DB_*` juga didukung.
+
+Setelah deploy pertama, buka `/install.php` satu kali untuk membuat tabel dan data awal di database yang terhubung. User Railway harus memiliki izin membuat tabel. Installer tidak mencoba membuat database baru di Railway. Setelah instalasi selesai, hapus atau batasi akses ke `/install.php` sebelum aplikasi dipakai publik.
+
+Booking grooming dari portal otomatis membuat antrean layanan. Di POS, kasir/admin memilih booking yang menunggu pembayaran; pelanggan, anabul, groomer, layanan, dan tarif terisi otomatis. Setelah checkout, antrean ditautkan ke transaksi agar booking tersebut tidak ditagih atau dibuat antrean baru untuk kedua kalinya. Jika database sudah terpasang sebelum alur ini ditambahkan, jalankan `/install.php` sekali untuk menambahkan kolom relasi transaksi.
 
 Installer bukan sistem migrasi versi. Skema memakai `CREATE TABLE IF NOT EXISTS` dan seed awal; menjalankannya kembali tidak menerapkan perubahan skema untuk tabel yang sudah ada. Cadangkan database sebelum perubahan manual atau pemasangan ulang.
 

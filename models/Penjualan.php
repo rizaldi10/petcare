@@ -39,9 +39,57 @@ class Penjualan {
         return $prefix . str_pad($num, 4, '0', STR_PAD_LEFT);
     }
 
-    public function processCheckout($id_customer, $id_user, $items, $groomer_id = null, $hewan_id = null, $catatan_grooming = '') {
+    public function processCheckout($id_customer, $id_user, $items, $groomer_id = null, $hewan_id = null, $catatan_grooming = '', $grooming_queue_id = null) {
         try {
             $this->conn->beginTransaction();
+
+            $bookedQueue = null;
+            if ($grooming_queue_id) {
+                $stmtQueue = $this->conn->prepare("SELECT g.*, h.id_customer, b.nama_barang, b.kode_barang,
+                                                          b.tipe_item, b.harga_jual
+                                                   FROM antrean_grooming g
+                                                   JOIN hewan_peliharaan h ON g.id_hewan = h.id_hewan
+                                                   JOIN barang b ON g.id_barang_layanan = b.id_barang
+                                                   WHERE g.id_grooming = :id AND g.id_penjualan IS NULL
+                                                   FOR UPDATE");
+                $stmtQueue->execute([':id' => $grooming_queue_id]);
+                $bookedQueue = $stmtQueue->fetch(PDO::FETCH_ASSOC);
+                if (!$bookedQueue || (int)$bookedQueue['id_customer'] !== (int)$id_customer) {
+                    throw new Exception('Booking grooming tidak ditemukan, sudah dibayar, atau bukan milik pelanggan ini.');
+                }
+                if ($bookedQueue['tipe_item'] !== 'jasa') {
+                    throw new Exception('Layanan pada booking tidak valid.');
+                }
+
+                // Pastikan layanan dan harganya berasal dari booking tersimpan di server.
+                $serviceFound = false;
+                foreach ($items as &$item) {
+                    if ((int)$item['id_barang'] === (int)$bookedQueue['id_barang_layanan']) {
+                        $item['nama_barang'] = $bookedQueue['nama_barang'];
+                        $item['kode_barang'] = $bookedQueue['kode_barang'];
+                        $item['tipe_item'] = 'jasa';
+                        $item['harga_satuan'] = (float)$bookedQueue['harga_jual'];
+                        $item['jumlah'] = 1;
+                        $serviceFound = true;
+                        break;
+                    }
+                }
+                unset($item);
+                if (!$serviceFound) {
+                    $items[] = [
+                        'id_barang' => (int)$bookedQueue['id_barang_layanan'],
+                        'nama_barang' => $bookedQueue['nama_barang'],
+                        'kode_barang' => $bookedQueue['kode_barang'],
+                        'tipe_item' => 'jasa',
+                        'harga_satuan' => (float)$bookedQueue['harga_jual'],
+                        'jumlah' => 1
+                    ];
+                }
+
+                $groomer_id = (int)$bookedQueue['id_groomer'];
+                $hewan_id = (int)$bookedQueue['id_hewan'];
+                $catatan_grooming = $bookedQueue['catatan_kondisi'] ?? '';
+            }
 
             $no_faktur = $this->generateNoFaktur();
             $tgl = date('Y-m-d');
@@ -120,17 +168,28 @@ class Penjualan {
                         $stmtKomisi->execute();
 
                         // Jika ada hewan yang dipilih, masukkan langsung ke antrean grooming
-                        if (!empty($hewan_id)) {
+                        if (!empty($hewan_id) && (!$bookedQueue || (int)$bookedQueue['id_barang_layanan'] !== $id_barang)) {
                             $stmtAntre = $this->conn->prepare("INSERT INTO antrean_grooming 
-                                (id_hewan, id_groomer, id_barang_layanan, status_pengerjaan, waktu_masuk, catatan_kondisi)
-                                VALUES (:hewan, :groomer, :layanan, 'Antre', NOW(), :catatan)");
+                                (id_hewan, id_groomer, id_barang_layanan, status_pengerjaan, waktu_masuk, catatan_kondisi, id_penjualan)
+                                VALUES (:hewan, :groomer, :layanan, 'Antre', NOW(), :catatan, :penjualan)");
                             $stmtAntre->bindParam(':hewan', $hewan_id);
                             $stmtAntre->bindParam(':groomer', $groomer_id);
                             $stmtAntre->bindParam(':layanan', $id_barang);
                             $stmtAntre->bindParam(':catatan', $catatan_grooming);
+                            $stmtAntre->bindParam(':penjualan', $id_penjualan);
                             $stmtAntre->execute();
                         }
                     }
+                }
+            }
+
+            if ($bookedQueue) {
+                $stmtMarkPaid = $this->conn->prepare("UPDATE antrean_grooming
+                                                      SET id_penjualan = :sale
+                                                      WHERE id_grooming = :queue AND id_penjualan IS NULL");
+                $stmtMarkPaid->execute([':sale' => $id_penjualan, ':queue' => $grooming_queue_id]);
+                if ($stmtMarkPaid->rowCount() !== 1) {
+                    throw new Exception('Booking grooming gagal ditautkan ke transaksi. Silakan coba lagi.');
                 }
             }
 

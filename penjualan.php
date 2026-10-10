@@ -7,6 +7,7 @@ require_once 'models/Barang.php';
 require_once 'models/Customer.php';
 require_once 'models/User.php';
 require_once 'models/Hewan.php';
+require_once 'models/Grooming.php';
 
 $database = new Database();
 $db = $database->getConnection();
@@ -15,6 +16,7 @@ $barangModel = new Barang($db);
 $customerModel = new Customer($db);
 $userModel = new User($db);
 $hewanModel = new Hewan($db);
+$groomingModel = new Grooming($db);
 
 $message = '';
 $message_type = '';
@@ -27,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $groomer_id = !empty($_POST['groomer_id']) ? (int)$_POST['groomer_id'] : null;
     $hewan_id = !empty($_POST['id_hewan']) ? (int)$_POST['id_hewan'] : null;
     $catatan_grooming = $_POST['catatan_grooming'] ?? '';
+    $grooming_queue_id = !empty($_POST['grooming_queue_id']) ? (int)$_POST['grooming_queue_id'] : null;
 
     if (empty($cartData) || !is_array($cartData)) {
         $message = 'Keranjang belanja masih kosong!';
@@ -38,7 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $cartData,
             $groomer_id,
             $hewan_id,
-            $catatan_grooming
+            $catatan_grooming,
+            $grooming_queue_id
         );
 
         if ($result['success']) {
@@ -55,6 +59,7 @@ $customers = $customerModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
 $products = $barangModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
 $groomers = $userModel->getGroomers();
 $allPets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
+$pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -239,11 +244,30 @@ $allPets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                     <form method="POST" id="checkoutForm" onsubmit="return validateCheckout()">
                         <input type="hidden" name="action" value="checkout">
                         <input type="hidden" name="cart_data" id="cartInput" value="[]">
+                        <input type="hidden" name="grooming_queue_id" id="groomingQueueInput" value="">
+                        <input type="hidden" name="id_customer" id="checkoutCustomerInput" value="">
+                        <input type="hidden" name="id_hewan" id="checkoutPetInput" value="">
+                        <input type="hidden" name="groomer_id" id="checkoutGroomerInput" value="">
+
+                        <?php if (!empty($pendingGroomingQueues)): ?>
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label for="pendingGroomingSelect" style="font-weight: 600; font-size: 0.85rem;">Booking Grooming Menunggu Pembayaran</label>
+                            <select id="pendingGroomingSelect" class="form-control" onchange="selectGroomingBooking(this.value)">
+                                <option value="">-- Transaksi biasa / pilih booking --</option>
+                                <?php foreach ($pendingGroomingQueues as $booking): ?>
+                                    <option value="<?php echo (int)$booking['id_grooming']; ?>">
+                                        <?php echo htmlspecialchars($booking['nama_customer'] . ' — ' . $booking['nama_hewan'] . ' — ' . $booking['nama_barang'] . ' — ' . formatCurrency($booking['harga_jual'])); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small style="color: #64748b;">Pilih booking agar layanan dan data pasien terisi otomatis.</small>
+                        </div>
+                        <?php endif; ?>
 
                         <!-- Data Pelanggan -->
                         <div class="form-group" style="margin-bottom: 10px;">
                             <label for="id_customer" style="font-weight: 600; font-size: 0.85rem;">Pelanggan / Member</label>
-                            <select id="id_customer" name="id_customer" required class="form-control" onchange="onCustomerChange(this.value)">
+                            <select id="id_customer" required class="form-control" onchange="onCustomerChange(this.value)">
                                 <?php foreach ($customers as $c): ?>
                                     <option value="<?php echo $c['id_customer']; ?>">
                                         <?php echo htmlspecialchars($c['nama_customer']); ?> (<?php echo $c['telepon']; ?>)
@@ -259,13 +283,13 @@ $allPets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                             <div style="margin-bottom: 8px;">
                                 <label style="font-size: 0.8rem; color: #1e3a8a;">Pilih Anabul Pasien</label>
-                                <select id="id_hewan" name="id_hewan" class="form-control" style="font-size: 0.85rem;">
+                                <select id="id_hewan" class="form-control" style="font-size: 0.85rem;" onchange="syncCheckoutAssignments()">
                                     <option value="">-- Pilih Pasien Hewan --</option>
                                 </select>
                             </div>
                             <div style="margin-bottom: 8px;">
                                 <label style="font-size: 0.8rem; color: #1e3a8a;">Pilih Groomer (Hak Komisi 20%)</label>
-                                <select id="groomer_id" name="groomer_id" class="form-control" style="font-size: 0.85rem;">
+                                <select id="groomer_id" class="form-control" style="font-size: 0.85rem;" onchange="syncCheckoutAssignments()">
                                     <?php foreach ($groomers as $g): ?>
                                         <option value="<?php echo $g['id_user']; ?>">✂️ <?php echo htmlspecialchars($g['nama']); ?></option>
                                     <?php endforeach; ?>
@@ -327,6 +351,58 @@ $allPets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
     <script src="assets/js/kasir.js"></script>
     <script>
         const allPetsData = <?php echo json_encode($allPets); ?>;
+        const pendingGroomingBookings = <?php echo json_encode($pendingGroomingQueues, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+        let activeGroomingQueueId = null;
+
+        function syncCheckoutAssignments() {
+            document.getElementById('checkoutCustomerInput').value = document.getElementById('id_customer').value;
+            document.getElementById('checkoutPetInput').value = document.getElementById('id_hewan').value;
+            document.getElementById('checkoutGroomerInput').value = document.getElementById('groomer_id').value;
+        }
+
+        function selectGroomingBooking(queueId) {
+            const queueInput = document.getElementById('groomingQueueInput');
+            if (activeGroomingQueueId) {
+                cart = cart.filter(item => !item.booked_queue_id);
+                activeGroomingQueueId = null;
+            }
+            queueInput.value = '';
+
+            if (!queueId) {
+                document.getElementById('id_customer').disabled = false;
+                document.getElementById('id_hewan').disabled = false;
+                document.getElementById('groomer_id').disabled = false;
+                syncCheckoutAssignments();
+                renderCart();
+                return;
+            }
+
+            const booking = pendingGroomingBookings.find(item => String(item.id_grooming) === String(queueId));
+            if (!booking) return;
+
+            activeGroomingQueueId = String(booking.id_grooming);
+            queueInput.value = booking.id_grooming;
+            document.getElementById('id_customer').value = booking.id_customer;
+            onCustomerChange(booking.id_customer);
+            document.getElementById('id_hewan').value = booking.id_hewan;
+            document.getElementById('groomer_id').value = booking.id_groomer;
+            document.querySelector('[name="catatan_grooming"]').value = booking.catatan_kondisi || '';
+            document.getElementById('id_customer').disabled = true;
+            document.getElementById('id_hewan').disabled = true;
+            document.getElementById('groomer_id').disabled = true;
+            syncCheckoutAssignments();
+
+            cart.push({
+                id_barang: parseInt(booking.id_barang_layanan),
+                kode_barang: booking.kode_barang,
+                nama_barang: booking.nama_barang,
+                tipe_item: 'jasa',
+                harga_satuan: parseFloat(booking.harga_jual),
+                jumlah: 1,
+                booked_queue_id: String(booking.id_grooming)
+            });
+            renderCart();
+        }
 
         function onCustomerChange(custId) {
             custId = parseInt(custId);
@@ -340,6 +416,7 @@ $allPets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                 opt.textContent = `${p.nama_hewan} (${p.spesies} - ${p.ras || 'Mix'})`;
                 petSelect.appendChild(opt);
             });
+            syncCheckoutAssignments();
         }
 
         function setQuickCash(val) {

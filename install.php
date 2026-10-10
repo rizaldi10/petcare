@@ -26,21 +26,25 @@ echo "<!DOCTYPE html>
 
 echo "<h1>🐾 Instalasi Database - PetCare System</h1>";
 
-// Konfigurasi database
-$host = 'localhost';
-$db_name = 'petcare_db';
-$username = 'root';
-$password = '';
+// Gunakan variabel MYSQL* dari Railway, dengan fallback untuk Laragon lokal.
+$host = getenv('MYSQLHOST') ?: (getenv('DB_HOST') ?: 'localhost');
+$port = getenv('MYSQLPORT') ?: (getenv('DB_PORT') ?: '3306');
+$db_name = getenv('MYSQLDATABASE') ?: (getenv('DB_DATABASE') ?: 'petcare_db');
+$username = getenv('MYSQLUSER') ?: (getenv('DB_USERNAME') ?: 'root');
+$password = getenv('MYSQLPASSWORD') ?: (getenv('DB_PASSWORD') ?: '');
+$isRemoteDatabase = getenv('MYSQLHOST') !== false || getenv('DB_HOST') !== false;
 
 try {
     // Koneksi tanpa database
-    $pdo = new PDO("mysql:host=$host", $username, $password);
+    $pdo = new PDO("mysql:host=$host;port=$port", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     echo "<div class='log-item success'>✅ Koneksi ke MySQL Server berhasil!</div>";
     
-    // Buat database jika belum ada
-    $pdo->exec("CREATE DATABASE IF NOT EXISTS `$db_name` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    // Railway memberi user akses ke database yang sudah dibuat; user lokal boleh membuatnya.
+    if (!$isRemoteDatabase) {
+        $pdo->exec("CREATE DATABASE IF NOT EXISTS `$db_name` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    }
     echo "<div class='log-item success'>✅ Database '$db_name' siap digunakan!</div>";
     
     // Pilih database
@@ -69,11 +73,24 @@ try {
             }
         }
     }
+
+    // Upgrade database lama: tautkan antrean grooming dengan transaksi kasir.
+    $columnCheck = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                                  WHERE TABLE_SCHEMA = DATABASE()
+                                    AND TABLE_NAME = 'antrean_grooming'
+                                    AND COLUMN_NAME = 'id_penjualan'");
+    $columnCheck->execute();
+    if (!(int)$columnCheck->fetchColumn()) {
+        $pdo->exec("ALTER TABLE antrean_grooming
+                    ADD COLUMN id_penjualan INT NULL,
+                    ADD CONSTRAINT fk_antrean_grooming_penjualan
+                    FOREIGN KEY (id_penjualan) REFERENCES penjualan(id_penjualan) ON DELETE SET NULL");
+    }
     
     echo "<div class='log-item success'>✅ Seluruh tabel dan data awal PetCare berhasil diimpor!</div>";
     
     // Validasi instalasi
-    $test_pdo = new PDO("mysql:host=$host;dbname=$db_name", $username, $password);
+    $test_pdo = new PDO("mysql:host=$host;port=$port;dbname=$db_name;charset=utf8mb4", $username, $password);
     $test_pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     $userCount = $test_pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();

@@ -5,6 +5,10 @@ let currentCategory = 'all';
 function addToCart(item) {
     const existingIndex = cart.findIndex(c => c.id_barang === item.id_barang);
     if (existingIndex > -1) {
+        if (cart[existingIndex].booked_queue_id) {
+            alert('Layanan dari booking pelanggan sudah otomatis masuk ke transaksi.');
+            return;
+        }
         if (item.tipe_item === 'retail' || item.tipe_item === 'repack') {
             if (cart[existingIndex].jumlah >= item.stok) {
                 alert('Stok barang tidak mencukupi! Tersisa: ' + item.stok);
@@ -30,6 +34,7 @@ function addToCart(item) {
 }
 
 function updateCartQty(index, newQty) {
+    if (cart[index] && cart[index].booked_queue_id) return;
     newQty = parseInt(newQty);
     if (newQty <= 0) {
         removeFromCart(index);
@@ -40,11 +45,19 @@ function updateCartQty(index, newQty) {
 }
 
 function removeFromCart(index) {
+    if (cart[index] && cart[index].booked_queue_id) return;
     cart.splice(index, 1);
     renderCart();
 }
 
 function clearCart() {
+    if (typeof selectGroomingBooking === 'function') {
+        const bookingSelect = document.getElementById('pendingGroomingSelect');
+        if (bookingSelect && bookingSelect.value) {
+            bookingSelect.value = '';
+            selectGroomingBooking('');
+        }
+    }
     cart = [];
     renderCart();
 }
@@ -76,28 +89,37 @@ function renderCart() {
             hasGroomingService = true;
         }
 
+        const bookedLabel = item.booked_queue_id
+            ? '<span class="badge badge-success" style="font-size: 0.7rem;">Dari booking customer</span>'
+            : '';
+        const quantityControls = item.booked_queue_id
+            ? '<span style="font-weight: bold; width: 25px; text-align: center;">1</span>'
+            : `<button type="button" class="btn btn-sm btn-secondary" onclick="updateCartQty(${idx}, ${item.jumlah - 1})">-</button>
+               <span style="font-weight: bold; width: 25px; text-align: center;">${item.jumlah}</span>
+               <button type="button" class="btn btn-sm btn-secondary" onclick="updateCartQty(${idx}, ${item.jumlah + 1})">+</button>`;
+        const removeButton = item.booked_queue_id
+            ? ''
+            : `<button type="button" onclick="removeFromCart(${idx})" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 5px 8px; margin-left: 5px; font-size: 1.1rem;">&times;</button>`;
+
         html += `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 0.95rem; color: #1e293b;">
                         ${item.nama_barang}
                         ${item.tipe_item === 'jasa' ? '<span class="badge badge-info" style="font-size: 0.7rem;">Jasa Grooming</span>' : ''}
+                        ${bookedLabel}
                     </div>
                     <div style="font-size: 0.85rem; color: #64748b;">
                         Rp ${item.harga_satuan.toLocaleString('id-ID')}
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="updateCartQty(${idx}, ${item.jumlah - 1})">-</button>
-                    <span style="font-weight: bold; width: 25px; text-align: center;">${item.jumlah}</span>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="updateCartQty(${idx}, ${item.jumlah + 1})">+</button>
+                    ${quantityControls}
                 </div>
                 <div style="font-weight: bold; width: 90px; text-align: right; color: #0f172a;">
                     Rp ${subtotal.toLocaleString('id-ID')}
                 </div>
-                <button type="button" onclick="removeFromCart(${idx})" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 5px 8px; margin-left: 5px; font-size: 1.1rem;">
-                    &times;
-                </button>
+                ${removeButton}
             </div>
         `;
     });
