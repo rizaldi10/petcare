@@ -39,56 +39,62 @@ class Penjualan {
         return $prefix . str_pad($num, 4, '0', STR_PAD_LEFT);
     }
 
-    public function processCheckout($id_customer, $id_user, $items, $groomer_id = null, $hewan_id = null, $catatan_grooming = '', $grooming_queue_id = null) {
+    public function processCheckout($id_customer, $id_user, $items, $stay_checkout_id = null, $amount_paid = null) {
         try {
             $this->conn->beginTransaction();
 
-            $bookedQueue = null;
-            if ($grooming_queue_id) {
-                $stmtQueue = $this->conn->prepare("SELECT g.*, h.id_customer, b.nama_barang, b.kode_barang,
-                                                          b.tipe_item, b.harga_jual
-                                                   FROM antrean_grooming g
-                                                   JOIN hewan_peliharaan h ON g.id_hewan = h.id_hewan
-                                                   JOIN barang b ON g.id_barang_layanan = b.id_barang
-                                                   WHERE g.id_grooming = :id AND g.id_penjualan IS NULL
-                                                   FOR UPDATE");
-                $stmtQueue->execute([':id' => $grooming_queue_id]);
-                $bookedQueue = $stmtQueue->fetch(PDO::FETCH_ASSOC);
-                if (!$bookedQueue || (int)$bookedQueue['id_customer'] !== (int)$id_customer) {
-                    throw new Exception('Booking grooming tidak ditemukan, sudah dibayar, atau bukan milik pelanggan ini.');
-                }
-                if ($bookedQueue['tipe_item'] !== 'jasa') {
-                    throw new Exception('Layanan pada booking tidak valid.');
-                }
-
-                // Pastikan layanan dan harganya berasal dari booking tersimpan di server.
-                $serviceFound = false;
-                foreach ($items as &$item) {
-                    if ((int)$item['id_barang'] === (int)$bookedQueue['id_barang_layanan']) {
-                        $item['nama_barang'] = $bookedQueue['nama_barang'];
-                        $item['kode_barang'] = $bookedQueue['kode_barang'];
-                        $item['tipe_item'] = 'jasa';
-                        $item['harga_satuan'] = (float)$bookedQueue['harga_jual'];
-                        $item['jumlah'] = 1;
-                        $serviceFound = true;
-                        break;
-                    }
-                }
-                unset($item);
-                if (!$serviceFound) {
-                    $items[] = [
-                        'id_barang' => (int)$bookedQueue['id_barang_layanan'],
-                        'nama_barang' => $bookedQueue['nama_barang'],
-                        'kode_barang' => $bookedQueue['kode_barang'],
-                        'tipe_item' => 'jasa',
-                        'harga_satuan' => (float)$bookedQueue['harga_jual'],
-                        'jumlah' => 1
-                    ];
+            $stayCheckout = null;
+            if ($stay_checkout_id) {
+                $stmtStay = $this->conn->prepare("SELECT r.*, h.id_customer, h.nama_hewan,
+                                                         k.nomor_kandang, k.ukuran
+                                                  FROM reservasi_inap r
+                                                  JOIN hewan_peliharaan h ON r.id_hewan = h.id_hewan
+                                                  JOIN kandang k ON r.id_kandang = k.id_kandang
+                                                  WHERE r.id_inap = :id
+                                                    AND r.status_inap = 'Menunggu_Pembayaran'
+                                                    AND r.id_penjualan IS NULL
+                                                  FOR UPDATE");
+                $stmtStay->execute([':id' => $stay_checkout_id]);
+                $stayCheckout = $stmtStay->fetch(PDO::FETCH_ASSOC);
+                if (!$stayCheckout || (int)$stayCheckout['id_customer'] !== (int)$id_customer) {
+                    throw new Exception('Tagihan inap tidak ditemukan, sudah dibayar, atau bukan milik pelanggan ini.');
                 }
 
-                $groomer_id = (int)$bookedQueue['id_groomer'];
-                $hewan_id = (int)$bookedQueue['id_hewan'];
-                $catatan_grooming = $bookedQueue['catatan_kondisi'] ?? '';
+                $stmtHotelItem = $this->conn->prepare("SELECT id_barang, kode_barang, nama_barang, tipe_item
+                                                       FROM barang WHERE kode_barang = 'HOTEL-SETTLE' LIMIT 1");
+                $stmtHotelItem->execute();
+                $hotelItem = $stmtHotelItem->fetch(PDO::FETCH_ASSOC);
+                if (!$hotelItem) {
+                    throw new Exception('Item pelunasan Pet Hotel belum tersedia. Jalankan install.php untuk memperbarui database.');
+                }
+
+                $hotelAmount = max(0, (float)$stayCheckout['total_biaya_akhir'] - (float)$stayCheckout['uang_muka_dp']);
+                $items = array_values(array_filter($items, function ($item) use ($hotelItem) {
+                    return (int)($item['id_barang'] ?? 0) !== (int)$hotelItem['id_barang'];
+                }));
+                $items[] = [
+                    'id_barang' => (int)$hotelItem['id_barang'],
+                    'nama_barang' => $hotelItem['nama_barang'],
+                    'kode_barang' => $hotelItem['kode_barang'],
+                    'tipe_item' => 'kandang',
+                    'harga_satuan' => $hotelAmount,
+                    'jumlah' => 1
+                ];
+            }
+
+            foreach ($items as $item) {
+                $stmtItemType = $this->conn->prepare("SELECT tipe_item FROM barang WHERE id_barang = :id");
+                $stmtItemType->execute([':id' => (int)($item['id_barang'] ?? 0)]);
+                $actualType = $stmtItemType->fetchColumn();
+                if (!$actualType) {
+                    throw new Exception('Item produk tidak ditemukan.');
+                }
+                if (!in_array($actualType, ['retail', 'repack', 'kandang'], true)) {
+                    throw new Exception('Tipe item tidak didukung.');
+                }
+                if ($actualType === 'kandang' && !$stayCheckout) {
+                    throw new Exception('Fasilitas inap hanya dapat dibayar melalui pelunasan reservasi Pet Hotel.');
+                }
             }
 
             $no_faktur = $this->generateNoFaktur();
@@ -99,6 +105,9 @@ class Penjualan {
             foreach ($items as $item) {
                 $subtotal = (float)$item['harga_satuan'] * (int)$item['jumlah'];
                 $total_bayar += $subtotal;
+            }
+            if ($amount_paid !== null && (float)$amount_paid < $total_bayar) {
+                throw new Exception('Nominal pembayaran kurang dari total transaksi.');
             }
 
             // 1. Simpan Header Penjualan
@@ -114,13 +123,6 @@ class Penjualan {
             $stmtHeader->execute();
 
             $id_penjualan = $this->conn->lastInsertId();
-
-            // Ambil persentase komisi dari pengaturan
-            $persenKomisi = 20;
-            $stmtSet = $this->conn->query("SELECT nilai FROM pengaturan WHERE kunci = 'persentase_komisi_groomer' LIMIT 1");
-            if ($rowSet = $stmtSet->fetch(PDO::FETCH_ASSOC)) {
-                $persenKomisi = (float)$rowSet['nilai'];
-            }
 
             // 2. Simpan Detail Item Penjualan
             $stmtDetail = $this->conn->prepare("INSERT INTO detail_penjualan 
@@ -153,43 +155,13 @@ class Penjualan {
                     $stmtStok->bindParam(':qty', $qty);
                     $stmtStok->bindParam(':id', $id_barang);
                     $stmtStok->execute();
-                } elseif ($bInfo && $bInfo['tipe_item'] === 'jasa') {
-                    // Jika ada layanan grooming & groomer dipilih, catat komisi & antrean
-                    if (!empty($groomer_id)) {
-                        $nominalKomisi = ($sub * $persenKomisi) / 100;
-                        $stmtKomisi = $this->conn->prepare("INSERT INTO komisi_groomer 
-                            (id_user_groomer, id_penjualan, id_barang_layanan, persentase_komisi, nominal_komisi, tgl_transaksi)
-                            VALUES (:groomer, :penjualan, :layanan, :persen, :nominal, NOW())");
-                        $stmtKomisi->bindParam(':groomer', $groomer_id);
-                        $stmtKomisi->bindParam(':penjualan', $id_penjualan);
-                        $stmtKomisi->bindParam(':layanan', $id_barang);
-                        $stmtKomisi->bindParam(':persen', $persenKomisi);
-                        $stmtKomisi->bindParam(':nominal', $nominalKomisi);
-                        $stmtKomisi->execute();
-
-                        // Jika ada hewan yang dipilih, masukkan langsung ke antrean grooming
-                        if (!empty($hewan_id) && (!$bookedQueue || (int)$bookedQueue['id_barang_layanan'] !== $id_barang)) {
-                            $stmtAntre = $this->conn->prepare("INSERT INTO antrean_grooming 
-                                (id_hewan, id_groomer, id_barang_layanan, status_pengerjaan, waktu_masuk, catatan_kondisi, id_penjualan)
-                                VALUES (:hewan, :groomer, :layanan, 'Antre', NOW(), :catatan, :penjualan)");
-                            $stmtAntre->bindParam(':hewan', $hewan_id);
-                            $stmtAntre->bindParam(':groomer', $groomer_id);
-                            $stmtAntre->bindParam(':layanan', $id_barang);
-                            $stmtAntre->bindParam(':catatan', $catatan_grooming);
-                            $stmtAntre->bindParam(':penjualan', $id_penjualan);
-                            $stmtAntre->execute();
-                        }
-                    }
                 }
             }
 
-            if ($bookedQueue) {
-                $stmtMarkPaid = $this->conn->prepare("UPDATE antrean_grooming
-                                                      SET id_penjualan = :sale
-                                                      WHERE id_grooming = :queue AND id_penjualan IS NULL");
-                $stmtMarkPaid->execute([':sale' => $id_penjualan, ':queue' => $grooming_queue_id]);
-                if ($stmtMarkPaid->rowCount() !== 1) {
-                    throw new Exception('Booking grooming gagal ditautkan ke transaksi. Silakan coba lagi.');
+            if ($stayCheckout) {
+                $inapModel = new Inap($this->conn);
+                if (!$inapModel->completePaidCheckout($stay_checkout_id, $id_penjualan)) {
+                    throw new Exception('Pembayaran tersimpan, tetapi status inap gagal diselesaikan. Silakan coba kembali.');
                 }
             }
 
@@ -318,6 +290,22 @@ class Penjualan {
         $stmt->bindParam(':end_date', $end_date);
         $stmt->execute();
         return $stmt;
+    }
+
+    public function getRevenueBreakdown($start_date, $end_date) {
+        $query = "SELECT
+                    COALESCE(SUM(CASE WHEN b.tipe_item <> 'kandang' THEN dp.subtotal ELSE 0 END), 0) AS omzet_produk,
+                    COALESCE(SUM(CASE WHEN b.tipe_item = 'kandang' THEN dp.subtotal ELSE 0 END), 0) AS omzet_penitipan
+                  FROM " . $this->table_name . " p
+                  JOIN detail_penjualan dp ON dp.id_penjualan = p.id_penjualan
+                  JOIN barang b ON b.id_barang = dp.id_barang
+                  WHERE p.tgl_penjualan BETWEEN :start_date AND :end_date";
+
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':start_date', $start_date);
+        $stmt->bindParam(':end_date', $end_date);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     public function getCustomerHistory($id_customer) {

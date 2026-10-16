@@ -57,6 +57,8 @@ try {
     }
     
     $schema = file_get_contents($schema_file);
+    // Schema file may use Windows CRLF; normalize before splitting statements.
+    $schema = str_replace(["\r\n", "\r"], "\n", $schema);
     
     // Split per statement dengan regex semi-colon di akhir baris
     $statements = array_filter(array_map('trim', explode(";\n", $schema)));
@@ -74,18 +76,21 @@ try {
         }
     }
 
-    // Upgrade database lama: tautkan antrean grooming dengan transaksi kasir.
-    $columnCheck = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                                  WHERE TABLE_SCHEMA = DATABASE()
-                                    AND TABLE_NAME = 'antrean_grooming'
-                                    AND COLUMN_NAME = 'id_penjualan'");
-    $columnCheck->execute();
-    if (!(int)$columnCheck->fetchColumn()) {
-        $pdo->exec("ALTER TABLE antrean_grooming
+    // Upgrade database lama untuk mengaitkan pembayaran POS dengan checkout inap.
+    $stayColumnCheck = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                                      WHERE TABLE_SCHEMA = DATABASE()
+                                        AND TABLE_NAME = 'reservasi_inap'
+                                        AND COLUMN_NAME = 'id_penjualan'");
+    $stayColumnCheck->execute();
+    if (!(int)$stayColumnCheck->fetchColumn()) {
+        $pdo->exec("ALTER TABLE reservasi_inap
                     ADD COLUMN id_penjualan INT NULL,
-                    ADD CONSTRAINT fk_antrean_grooming_penjualan
+                    ADD CONSTRAINT fk_reservasi_inap_penjualan
                     FOREIGN KEY (id_penjualan) REFERENCES penjualan(id_penjualan) ON DELETE SET NULL");
     }
+    $pdo->exec("ALTER TABLE reservasi_inap
+                MODIFY status_inap ENUM('Booking', 'Check-In', 'Menunggu_Pembayaran', 'Selesai', 'Batal')
+                NOT NULL DEFAULT 'Check-In'");
     
     echo "<div class='log-item success'>✅ Seluruh tabel dan data awal PetCare berhasil diimpor!</div>";
     
@@ -101,7 +106,7 @@ try {
             📊 <strong>Data Terverifikasi:</strong><br>
             • User Staff: $userCount akun<br>
             • Fasilitas Kandang: $cageCount unit<br>
-            • Produk / Jasa: $itemCount item
+            • Produk / Item kamar: $itemCount item
           </div>";
     
     echo "<h3>🎉 Instalasi Sukses!</h3>";
@@ -109,7 +114,6 @@ try {
     echo "<ul>
             <li><strong>Admin:</strong> <code>admin</code></li>
             <li><strong>Kasir:</strong> <code>kasir1</code></li>
-            <li><strong>Groomer:</strong> <code>groomer1</code></li>
           </ul>";
     echo "<p><strong>Akun Portal Mandiri Pelanggan (Password: <code>password</code>):</strong></p>";
     echo "<ul>

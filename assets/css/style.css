@@ -637,6 +637,7 @@ body.sidebar-collapsed .main-content {
 
 .stat-card.card-primary::before { background: var(--color-primary); }
 .stat-card.card-success::before { background: var(--color-success); }
+.stat-card.card-info::before { background: var(--color-info); }
 .stat-card.card-warning::before { background: var(--color-warning); }
 .stat-card.card-danger::before { background: var(--color-danger); }
 

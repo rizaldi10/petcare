@@ -1,14 +1,13 @@
-# PetCare POS, Grooming & Hotel Management
+# PetCare POS & Hotel Management
 
-Aplikasi manajemen pet shop berbasis PHP native dan MySQL/MariaDB. Proyek ini mencakup POS, pengelolaan stok dan pembelian, antrean grooming, reservasi inap, serta portal pelanggan.
+Aplikasi manajemen pet shop berbasis PHP native dan MySQL/MariaDB. Proyek ini mencakup POS, pengelolaan stok dan pembelian, reservasi inap, serta portal pelanggan.
 
 ## Fitur
 
 - **POS dan transaksi:** penjualan produk dan layanan, pencetakan struk, laporan penjualan.
-- **Persediaan:** katalog barang dan jasa, kategori, vendor, pembelian, pemantauan stok, serta pencatatan konversi pakan repack.
-- **Grooming:** antrean kerja bertahap, catatan kondisi dan alergi hewan, serta pencatatan komisi saat layanan grooming dijual di POS.
+- **Persediaan:** katalog produk, kategori, vendor, pembelian, pemantauan stok, serta pencatatan konversi pakan repack.
 - **Pet hotel:** reservasi, check-in/check-out, pilihan pakan, dan pencatatan biaya inap serta denda overstay.
-- **Portal pelanggan:** pendaftaran/login, profil hewan, booking grooming dan inap, pelacakan grooming, serta riwayat transaksi.
+- **Portal pelanggan:** pendaftaran/login, profil hewan, booking inap, serta riwayat transaksi.
 - **Administrasi:** pengguna dan role staf, pengaturan toko, tema, dan dashboard.
 
 ## Teknologi dan struktur
@@ -50,7 +49,7 @@ Railway mendeteksi `Dockerfile` di root proyek. Image memasang ekstensi `pdo_mys
 
 Setelah deploy pertama, buka `/install.php` satu kali untuk membuat tabel dan data awal di database yang terhubung. User Railway harus memiliki izin membuat tabel. Installer tidak mencoba membuat database baru di Railway. Setelah instalasi selesai, hapus atau batasi akses ke `/install.php` sebelum aplikasi dipakai publik.
 
-Booking grooming dari portal otomatis membuat antrean layanan. Di POS, kasir/admin memilih booking yang menunggu pembayaran; pelanggan, anabul, groomer, layanan, dan tarif terisi otomatis. Setelah checkout, antrean ditautkan ke transaksi agar booking tersebut tidak ditagih atau dibuat antrean baru untuk kedua kalinya. Jika database sudah terpasang sebelum alur ini ditambahkan, jalankan `/install.php` sekali untuk menambahkan kolom relasi transaksi.
+Check-out pet hotel juga diteruskan ke POS. Tagihan, pelanggan, dan item pelunasan terisi otomatis; status inap berubah menjadi `Selesai` dan kamar tersedia kembali setelah pembayaran berhasil. Jika database lama, jalankan `/install.php` sekali agar kolom relasi transaksi dan item pelunasan ditambahkan.
 
 Installer bukan sistem migrasi versi. Skema memakai `CREATE TABLE IF NOT EXISTS` dan seed awal; menjalankannya kembali tidak menerapkan perubahan skema untuk tabel yang sudah ada. Cadangkan database sebelum perubahan manual atau pemasangan ulang.
 
@@ -62,7 +61,6 @@ Seed bawaan menggunakan password `password` untuk akun berikut:
 | --- | --- | --- |
 | Admin | `admin` | Administrasi aplikasi |
 | Kasir | `kasir1` | POS dan operasional yang diizinkan untuk kasir |
-| Groomer | `groomer1` | Papan antrean grooming |
 | Pelanggan | `081234567890` | Ahmad Fauzi; hewan Milo dan Bobby |
 | Pelanggan | `085678901234` | Jessica Tan; hewan Cleo |
 

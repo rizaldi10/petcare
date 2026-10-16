@@ -34,7 +34,8 @@ require_once __DIR__ . '/database.php';
 
 // Helper functions staf internal
 function isLoggedIn() {
-    return isset($_SESSION['user_id']) && isset($_SESSION['user_role']);
+    return isset($_SESSION['user_id'])
+        && in_array($_SESSION['user_role'] ?? null, ['admin', 'kasir'], true);
 }
 
 function requireLogin() {

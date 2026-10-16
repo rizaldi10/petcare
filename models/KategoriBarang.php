@@ -29,8 +29,21 @@ class KategoriBarang {
 
     public function readAll() {
         $query = "SELECT id_kategori, id_kategori as id, nama_kategori,
-                  (SELECT COUNT(*) FROM barang b WHERE b.id_kategori = k.id_kategori) as total_barang
-                  FROM " . $this->table_name . " k ORDER BY nama_kategori ASC";
+                  (SELECT COUNT(*) FROM barang b
+                   WHERE b.id_kategori = k.id_kategori
+                     AND b.tipe_item IN ('retail', 'repack', 'kandang')) as total_barang
+                  FROM " . $this->table_name . " k
+                  WHERE NOT EXISTS (
+                      SELECT 1 FROM barang b
+                      WHERE b.id_kategori = k.id_kategori
+                        AND b.tipe_item NOT IN ('retail', 'repack', 'kandang')
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM barang b
+                      WHERE b.id_kategori = k.id_kategori
+                        AND b.tipe_item IN ('retail', 'repack', 'kandang')
+                  )
+                  ORDER BY nama_kategori ASC";
 
         $stmt = $this->conn->prepare($query);
         $stmt->execute();

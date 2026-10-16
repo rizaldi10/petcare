@@ -3,9 +3,6 @@ require_once dirname(__DIR__) . '/config/config.php';
 require_once dirname(__DIR__) . '/models/Customer.php';
 require_once dirname(__DIR__) . '/models/Inap.php';
 require_once dirname(__DIR__) . '/models/Kandang.php';
-require_once dirname(__DIR__) . '/models/Barang.php';
-require_once dirname(__DIR__) . '/models/Grooming.php';
-require_once dirname(__DIR__) . '/models/User.php';
 
 requireCustomerLogin();
 
@@ -14,9 +11,6 @@ $db = $database->getConnection();
 $customerModel = new Customer($db);
 $inapModel = new Inap($db);
 $kandangModel = new Kandang($db);
-$barangModel = new Barang($db);
-$groomingModel = new Grooming($db);
-$userModel = new User($db);
 
 $customer_id = $_SESSION['customer_id'];
 $message = '';
@@ -50,36 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Gagal mengajukan reservasi.';
             $message_type = 'error';
         }
-    } elseif ($booking_type === 'grooming') {
-        $id_hewan = (int)$_POST['id_hewan'];
-        $id_layanan = (int)$_POST['id_barang_layanan'];
-        $catatan = sanitizeInput($_POST['catatan_kondisi'] ?? '');
-
-        // Cari groomer pertama yang tersedia
-        $groomers = $userModel->getGroomers();
-        $id_groomer = !empty($groomers) ? $groomers[0]['id_user'] : 1;
-
-        $queueId = $groomingModel->createQueue([
-            'id_hewan' => $id_hewan,
-            'id_groomer' => $id_groomer,
-            'id_barang_layanan' => $id_layanan,
-            'status_pengerjaan' => 'Antre',
-            'catatan_kondisi' => $catatan
-        ]);
-
-        if ($queueId) {
-            $message = 'Pemesanan antrean grooming berhasil! Silakan bawa anabul ke pet care.';
-            $message_type = 'success';
-        } else {
-            $message = 'Gagal mengajukan booking grooming.';
-            $message_type = 'error';
-        }
+    } else {
+        $message = 'Jenis reservasi tidak valid.';
+        $message_type = 'error';
     }
 }
 
 $my_pets = $customerModel->getPets($customer_id);
 $cages = $kandangModel->readAll(true)->fetchAll(PDO::FETCH_ASSOC);
-$services = $barangModel->getServices()->fetchAll(PDO::FETCH_ASSOC);
 $my_bookings = $inapModel->getCustomerBookings($customer_id);
 ?>
 <!DOCTYPE html>
@@ -99,15 +71,14 @@ $my_bookings = $inapModel->getCustomerBookings($customer_id);
             <a href="index.php" class="portal-link">Beranda</a>
             <a href="my_pets.php" class="portal-link">Anabul Saya</a>
             <a href="booking.php" class="portal-link active">Booking Online</a>
-            <a href="track.php" class="portal-link">Pantau Perawatan (Live)</a>
             <a href="riwayat.php" class="portal-link">Riwayat Struk</a>
             <a href="index.php?action=logout" class="portal-link" style="color: #ef4444;">Keluar</a>
         </div>
     </nav>
 
     <div class="portal-container">
-        <h2 style="margin: 0 0 5px 0; color: #0f172a;">Reservasi Kamar Hotel & Grooming Daring</h2>
-        <p style="margin: 0 0 20px 0; color: #64748b;">Pesan fasilitas kamar inap atau antrean salon perawatan anabul tanpa antre di kasir.</p>
+        <h2 style="margin: 0 0 5px 0; color: #0f172a;">Reservasi Kamar Hotel</h2>
+        <p style="margin: 0 0 20px 0; color: #64748b;">Pesan fasilitas kamar inap anabul secara daring.</p>
 
         <?php if ($message): ?>
             <div style="background: <?php echo ($message_type === 'success') ? '#dcfce7' : '#fee2e2'; ?>; color: <?php echo ($message_type === 'success') ? '#166534' : '#991b1b'; ?>; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;">
@@ -121,7 +92,7 @@ $my_bookings = $inapModel->getCustomerBookings($customer_id);
                 <a href="my_pets.php" class="portal-btn">+ Daftarkan Anabul Dulu</a>
             </div>
         <?php else: ?>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <div style="max-width: 720px; margin: 0 auto;">
                 <!-- Form Booking Pet Hotel -->
                 <div class="portal-card">
                     <h3 style="margin-top: 0; color: #0284c7; display: flex; align-items: center; gap: 8px;">
@@ -177,46 +148,6 @@ $my_bookings = $inapModel->getCustomerBookings($customer_id);
                     </form>
                 </div>
 
-                <!-- Form Booking Grooming -->
-                <div class="portal-card">
-                    <h3 style="margin-top: 0; color: #10b981; display: flex; align-items: center; gap: 8px;">
-                        <span>✂️</span> Booking Layanan Grooming
-                    </h3>
-                    <p style="font-size: 0.85rem; color: #64748b;">Mandi kutu, jamur, potong kuku, & hair styling spa.</p>
-
-                    <form method="POST">
-                        <input type="hidden" name="booking_type" value="grooming">
-
-                        <div style="margin-bottom: 12px;">
-                            <label style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px;">Pilih Anabul Pasien</label>
-                            <select name="id_hewan" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                <?php foreach ($my_pets as $pet): ?>
-                                    <option value="<?php echo $pet['id_hewan']; ?>">
-                                        <?php echo htmlspecialchars($pet['nama_hewan']); ?> (<?php echo $pet['spesies']; ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div style="margin-bottom: 12px;">
-                            <label style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px;">Pilih Paket Layanan</label>
-                            <select name="id_barang_layanan" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                <?php foreach ($services as $srv): ?>
-                                    <option value="<?php echo $srv['id_barang']; ?>">
-                                        <?php echo htmlspecialchars($srv['nama_barang']); ?> - <?php echo formatCurrency($srv['harga_jual']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px;">Catatan Tambahan untuk Groomer</label>
-                            <textarea name="catatan_kondisi" rows="3" style="width: 100%; box-sizing: border-box; padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1;" placeholder="Misal: ada gimbal di bawah telinga, mohon potong kuku pendek..."></textarea>
-                        </div>
-
-                        <button type="submit" class="portal-btn" style="width: 100%; background: #10b981;">Pesan Slot Grooming</button>
-                    </form>
-                </div>
             </div>
 
             <!-- Riwayat Booking Saya -->

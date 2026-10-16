@@ -1,6 +1,11 @@
 <?php
 require_once 'config/config.php';
-requireRole(['admin', 'kasir']);
+$customer_view = ($_GET['view'] ?? '') === 'customer';
+if ($customer_view) {
+    requireCustomerLogin();
+} else {
+    requireRole(['admin', 'kasir']);
+}
 
 require_once 'models/Penjualan.php';
 require_once 'models/Customer.php';
@@ -16,8 +21,13 @@ $pengaturanModel = new Pengaturan($db);
 $penjualan_id = (int)($_GET['id'] ?? 0);
 $trx = $penjualanModel->readOne($penjualan_id);
 
+// Pelanggan hanya boleh melihat struk transaksi miliknya sendiri.
+if ($customer_view && $trx && (int)$trx['id_customer'] !== (int)$_SESSION['customer_id']) {
+    $trx = false;
+}
+
 if (!$trx) {
-    header('Location: penjualan.php');
+    header('Location: ' . ($customer_view ? 'portal/riwayat.php' : 'penjualan.php'));
     exit();
 }
 
@@ -27,13 +37,9 @@ $telepon_toko = $pengaturanModel->get('telepon_toko') ?? '0812-3456-7890';
 $footer_struk = $pengaturanModel->get('footer_struk') ?? 'Terima kasih telah mempercayakan anabul kepada kami!';
 
 $details = $penjualanModel->getDetailPenjualan($penjualan_id);
-$hasGrooming = false;
 $itemsList = [];
 while ($d = $details->fetch(PDO::FETCH_ASSOC)) {
     $itemsList[] = $d;
-    if ($d['tipe_item'] === 'jasa') {
-        $hasGrooming = true;
-    }
 }
 ?>
 <!DOCTYPE html>
@@ -46,8 +52,8 @@ while ($d = $details->fetch(PDO::FETCH_ASSOC)) {
 </head>
 <body class="print-receipt">
     <div class="no-print" style="max-width: 320px; margin: 10px auto; display: flex; gap: 8px;">
-        <a href="penjualan.php" style="flex: 1; text-align: center; background: #64748b; color: white; padding: 10px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">
-            ← Kembali ke Kasir
+        <a href="<?php echo $customer_view ? 'portal/riwayat.php' : 'penjualan.php'; ?>" style="flex: 1; text-align: center; background: #64748b; color: white; padding: 10px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">
+            ← <?php echo $customer_view ? 'Kembali ke Riwayat' : 'Kembali ke Kasir'; ?>
         </a>
         <button onclick="window.print()" style="flex: 1; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">
             🖨️ Cetak Struk
@@ -65,7 +71,7 @@ while ($d = $details->fetch(PDO::FETCH_ASSOC)) {
             <div><strong>No. Faktur:</strong> <?php echo htmlspecialchars($trx['no_faktur']); ?></div>
             <div><strong>Tanggal:</strong> <?php echo formatTanggal($trx['tgl_penjualan']); ?> <?php echo date('H:i'); ?></div>
             <div><strong>Kasir:</strong> <?php echo htmlspecialchars($trx['kasir']); ?></div>
-            <div><strong>Pelanggan:</strong> <?php echo htmlspecialchars($trx['nama_customer']); ?> (<?php echo htmlspecialchars($trx['customer_telepon']); ?>)</div>
+            <div><strong>Pelanggan:</strong> <?php echo htmlspecialchars($trx['nama_customer']); ?><?php if ($trx['nama_customer'] !== 'Pelanggan Umum'): ?> (<?php echo htmlspecialchars($trx['customer_telepon']); ?>)<?php endif; ?></div>
         </div>
 
         <table class="receipt-table">
@@ -81,9 +87,6 @@ while ($d = $details->fetch(PDO::FETCH_ASSOC)) {
                 <tr>
                     <td>
                         <?php echo htmlspecialchars($it['nama_barang']); ?>
-                        <?php if ($it['tipe_item'] === 'jasa'): ?>
-                            <br><small><em>(Paket Grooming Salon)</em></small>
-                        <?php endif; ?>
                     </td>
                     <td style="text-align: center;"><?php echo $it['jumlah']; ?></td>
                     <td style="text-align: right;"><?php echo number_format($it['subtotal'], 0, ',', '.'); ?></td>
@@ -103,15 +106,6 @@ while ($d = $details->fetch(PDO::FETCH_ASSOC)) {
             </div>
         </div>
 
-        <?php if ($hasGrooming): ?>
-        <div class="pickup-ticket">
-            <div class="ticket-title">TIKET PENGAMBILAN ANABUL</div>
-            <div class="ticket-number">#<?php echo substr($trx['no_faktur'], -4); ?></div>
-            <div style="font-size: 10px; margin-top: 4px;">
-                Tunjukkan nomor tiket ini kepada staf kasir/groomer saat menjemput anabul Anda.
-            </div>
-        </div>
-        <?php endif; ?>
 
         <div class="receipt-footer">
             <p><?php echo htmlspecialchars($footer_struk); ?></p>

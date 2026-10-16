@@ -5,18 +5,18 @@ requireRole(['admin', 'kasir']);
 require_once 'models/Penjualan.php';
 require_once 'models/Barang.php';
 require_once 'models/Customer.php';
-require_once 'models/User.php';
-require_once 'models/Hewan.php';
-require_once 'models/Grooming.php';
+require_once 'models/Inap.php';
+require_once 'models/Pengaturan.php';
 
 $database = new Database();
 $db = $database->getConnection();
 $penjualanModel = new Penjualan($db);
 $barangModel = new Barang($db);
 $customerModel = new Customer($db);
-$userModel = new User($db);
-$hewanModel = new Hewan($db);
-$groomingModel = new Grooming($db);
+$walkInCustomerId = $customerModel->ensureWalkInCustomer();
+$inapModel = new Inap($db);
+$pengaturanModel = new Pengaturan($db);
+$hourly_penalty_rate = (float)($pengaturanModel->get('tarif_denda_overstay_per_jam') ?? 15000);
 
 $message = '';
 $message_type = '';
@@ -26,12 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $id_customer = (int)$_POST['id_customer'];
     $id_user = (int)$_SESSION['user_id'];
     $cartData = json_decode($_POST['cart_data'], true);
-    $groomer_id = !empty($_POST['groomer_id']) ? (int)$_POST['groomer_id'] : null;
-    $hewan_id = !empty($_POST['id_hewan']) ? (int)$_POST['id_hewan'] : null;
-    $catatan_grooming = $_POST['catatan_grooming'] ?? '';
-    $grooming_queue_id = !empty($_POST['grooming_queue_id']) ? (int)$_POST['grooming_queue_id'] : null;
+    $stay_checkout_id = !empty($_POST['stay_checkout_id']) ? (int)$_POST['stay_checkout_id'] : null;
 
-    if (empty($cartData) || !is_array($cartData)) {
+    if ($stay_checkout_id && $_SESSION['user_role'] !== 'kasir') {
+        $message = 'Hanya kasir yang dapat memproses pembayaran check-out Pet Hotel.';
+        $message_type = 'error';
+    } elseif (empty($cartData) || !is_array($cartData)) {
         $message = 'Keranjang belanja masih kosong!';
         $message_type = 'error';
     } else {
@@ -39,10 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $id_customer,
             $id_user,
             $cartData,
-            $groomer_id,
-            $hewan_id,
-            $catatan_grooming,
-            $grooming_queue_id
+            $stay_checkout_id,
+            (float)($_POST['nominal_bayar'] ?? 0)
         );
 
         if ($result['success']) {
@@ -55,11 +53,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
-$customers = $customerModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
-$products = $barangModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
-$groomers = $userModel->getGroomers();
-$allPets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
-$pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
+$customers = $customerModel->readAllForPOS()->fetchAll(PDO::FETCH_ASSOC);
+$products = array_values(array_filter(
+    $barangModel->readAll()->fetchAll(PDO::FETCH_ASSOC),
+    function ($product) { return in_array($product['tipe_item'], ['retail', 'repack'], true); }
+));
+$stayCheckoutPayload = null;
+if (!empty($_GET['stay_checkout']) && $_SESSION['user_role'] !== 'kasir') {
+    $message = 'Hanya kasir yang dapat memproses pembayaran check-out Pet Hotel.';
+    $message_type = 'error';
+} elseif (!empty($_GET['stay_checkout'])) {
+    $pendingStay = $inapModel->getPendingCheckout((int)$_GET['stay_checkout']);
+    if ($pendingStay) {
+        $hotelItemStmt = $db->query("SELECT id_barang, kode_barang, nama_barang FROM barang WHERE kode_barang = 'HOTEL-SETTLE' LIMIT 1");
+        $hotelItem = $hotelItemStmt->fetch(PDO::FETCH_ASSOC);
+        if ($hotelItem) {
+            $stayCheckoutPayload = [
+                'id_inap' => (int)$pendingStay['id_inap'],
+                'id_customer' => (int)$pendingStay['id_customer'],
+                'nama_customer' => $pendingStay['nama_customer'],
+                'nama_hewan' => $pendingStay['nama_hewan'],
+                'nomor_kandang' => $pendingStay['nomor_kandang'],
+                'ukuran' => $pendingStay['ukuran'],
+                'total_biaya_akhir' => (float)$pendingStay['total_biaya_akhir'],
+                'uang_muka_dp' => (float)$pendingStay['uang_muka_dp'],
+                'sisa_bayar' => (float)$pendingStay['sisa_bayar'],
+                'hotel_item' => $hotelItem
+            ];
+        } else {
+            $message = 'Item pelunasan Pet Hotel belum tersedia. Jalankan install.php untuk memperbarui database.';
+            $message_type = 'error';
+        }
+    } else {
+        $message = 'Tagihan inap tidak ditemukan atau sudah dibayar.';
+        $message_type = 'error';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -173,11 +202,10 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
                 <div class="page-header">
                     <div>
                         <h1 class="page-title"><i class="bi bi-cart3"></i> Kasir POS Hibrida</h1>
-                        <div class="breadcrumb-nav">Transaksi Ritel Produk Hewan, Eceran Repack & Layanan Grooming</div>
+                        <div class="breadcrumb-nav">Transaksi ritel produk hewan, repack eceran, dan pelunasan Pet Hotel</div>
                     </div>
                     <div class="page-actions">
                         <a href="repack.php" class="btn btn-sm btn-secondary"><i class="bi bi-boxes"></i> Konversi Repack</a>
-                        <a href="antrean_grooming.php" class="btn btn-sm btn-secondary"><i class="bi bi-scissors"></i> Antrean Grooming</a>
                         <a href="booking_inap.php" class="btn btn-sm btn-secondary"><i class="bi bi-building"></i> Pet Hotel</a>
                     </div>
                 </div>
@@ -189,18 +217,16 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
                 <?php endif; ?>
 
             <div class="pos-layout">
-                <!-- SISI KIRI: KATALOG PRODUK & JASA -->
+                <!-- SISI KIRI: KATALOG PRODUK -->
                 <div class="catalog-container">
                     <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                        <input type="text" id="searchBox" class="form-control" placeholder="Cari nama barang, pakan, barcode, atau paket jasa..." oninput="searchProducts(this.value)">
+                        <input type="text" id="searchBox" class="form-control" placeholder="Cari nama barang, pakan, atau barcode..." oninput="searchProducts(this.value)">
                     </div>
 
                     <div class="filter-tabs">
-                        <button type="button" class="filter-pill active" data-type="all" onclick="filterProducts('all')">Semua Item</button>
+                        <button type="button" class="filter-pill active" data-type="all" onclick="filterProducts('all')">Semua Produk</button>
                         <button type="button" class="filter-pill" data-type="retail" onclick="filterProducts('retail')">Pakan & Ritel</button>
                         <button type="button" class="filter-pill" data-type="repack" onclick="filterProducts('repack')">Repack Eceran</button>
-                        <button type="button" class="filter-pill" data-type="jasa" onclick="filterProducts('jasa')"><i class="bi bi-scissors"></i> Layanan Grooming</button>
-                        <button type="button" class="filter-pill" data-type="kandang" onclick="filterProducts('kandang')"><i class="bi bi-building"></i> Fasilitas Inap</button>
                     </div>
 
                     <div class="product-grid" id="productGrid">
@@ -211,10 +237,9 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
                              data-code="<?php echo htmlspecialchars($p['kode_barang']); ?>"
                              onclick='addToCart(<?php echo json_encode($p); ?>)'>
                             <div>
-                                <span class="badge badge-<?php 
-                                    echo ($p['tipe_item'] === 'retail') ? 'primary' : 
-                                         (($p['tipe_item'] === 'repack') ? 'warning' : 
-                                         (($p['tipe_item'] === 'jasa') ? 'info' : 'secondary')); 
+                                <span class="badge badge-<?php
+                                    echo ($p['tipe_item'] === 'retail') ? 'primary' :
+                                         (($p['tipe_item'] === 'repack') ? 'warning' : 'secondary');
                                 ?>" style="font-size: 0.7rem; margin-bottom: 6px; display: inline-block;">
                                     <?php echo strtoupper($p['tipe_item']); ?>
                                 </span>
@@ -227,11 +252,7 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
                                     <?php echo formatCurrency($p['harga_jual']); ?>
                                 </div>
                                 <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">
-                                    <?php if ($p['tipe_item'] === 'jasa'): ?>
-                                        Paket Layanan
-                                    <?php else: ?>
-                                        Stok: <strong><?php echo $p['stok']; ?></strong> item
-                                    <?php endif; ?>
+                                    Stok: <strong><?php echo $p['stok']; ?></strong> item
                                 </div>
                             </div>
                         </div>
@@ -242,63 +263,33 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
                 <!-- SISI KANAN: KERANJANG BELANJA & PEMBAYARAN -->
                 <div class="cart-container">
                     <form method="POST" id="checkoutForm" onsubmit="return validateCheckout()">
-                        <input type="hidden" name="action" value="checkout">
+                        <input type="hidden" name="action" id="checkoutActionInput" value="checkout">
                         <input type="hidden" name="cart_data" id="cartInput" value="[]">
-                        <input type="hidden" name="grooming_queue_id" id="groomingQueueInput" value="">
+                        <input type="hidden" name="stay_checkout_id" id="stayCheckoutInput" value="">
                         <input type="hidden" name="id_customer" id="checkoutCustomerInput" value="">
-                        <input type="hidden" name="id_hewan" id="checkoutPetInput" value="">
-                        <input type="hidden" name="groomer_id" id="checkoutGroomerInput" value="">
 
-                        <?php if (!empty($pendingGroomingQueues)): ?>
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label for="pendingGroomingSelect" style="font-weight: 600; font-size: 0.85rem;">Booking Grooming Menunggu Pembayaran</label>
-                            <select id="pendingGroomingSelect" class="form-control" onchange="selectGroomingBooking(this.value)">
-                                <option value="">-- Transaksi biasa / pilih booking --</option>
-                                <?php foreach ($pendingGroomingQueues as $booking): ?>
-                                    <option value="<?php echo (int)$booking['id_grooming']; ?>">
-                                        <?php echo htmlspecialchars($booking['nama_customer'] . ' — ' . $booking['nama_hewan'] . ' — ' . $booking['nama_barang'] . ' — ' . formatCurrency($booking['harga_jual'])); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <small style="color: #64748b;">Pilih booking agar layanan dan data pasien terisi otomatis.</small>
+                        <?php if ($stayCheckoutPayload): ?>
+                        <div class="alert alert-info" style="margin-bottom: 10px;">
+                            <strong>Pelunasan Pet Hotel</strong><br>
+                            Pelanggan: <?php echo htmlspecialchars($stayCheckoutPayload['nama_customer']); ?> ·
+                            Anabul: <?php echo htmlspecialchars($stayCheckoutPayload['nama_hewan']); ?> ·
+                            Kamar: <?php echo htmlspecialchars($stayCheckoutPayload['nomor_kandang']); ?>
+                            <br>Sisa pembayaran: <strong><?php echo formatCurrency($stayCheckoutPayload['sisa_bayar']); ?></strong>
+                            (total <?php echo formatCurrency($stayCheckoutPayload['total_biaya_akhir']); ?>, DP <?php echo formatCurrency($stayCheckoutPayload['uang_muka_dp']); ?>)
                         </div>
                         <?php endif; ?>
 
                         <!-- Data Pelanggan -->
                         <div class="form-group" style="margin-bottom: 10px;">
-                            <label for="id_customer" style="font-weight: 600; font-size: 0.85rem;">Pelanggan / Member</label>
-                            <select id="id_customer" required class="form-control" onchange="onCustomerChange(this.value)">
+                            <label for="id_customer" style="font-weight: 600; font-size: 0.85rem;">Pelanggan</label>
+                            <select id="id_customer" required class="form-control" onchange="syncCheckoutAssignments()">
                                 <?php foreach ($customers as $c): ?>
-                                    <option value="<?php echo $c['id_customer']; ?>">
-                                        <?php echo htmlspecialchars($c['nama_customer']); ?> (<?php echo $c['telepon']; ?>)
+                                    <option value="<?php echo (int)$c['id_customer']; ?>" <?php echo ((int)$c['id_customer'] === $walkInCustomerId) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($c['nama_customer']); ?><?php if ((int)$c['id_customer'] !== $walkInCustomerId): ?> (<?php echo htmlspecialchars($c['telepon']); ?>)<?php else: ?> — tanpa data pribadi<?php endif; ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                        </div>
-
-                        <!-- Data Penugasan Grooming (Tampil jika ada Jasa di Keranjang) -->
-                        <div id="serviceAlert" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                            <div style="font-size: 0.85rem; font-weight: bold; color: #1e40af; margin-bottom: 8px;">
-                                ✂️ Penugasan Layanan Grooming & Komisi
-                            </div>
-                            <div style="margin-bottom: 8px;">
-                                <label style="font-size: 0.8rem; color: #1e3a8a;">Pilih Anabul Pasien</label>
-                                <select id="id_hewan" class="form-control" style="font-size: 0.85rem;" onchange="syncCheckoutAssignments()">
-                                    <option value="">-- Pilih Pasien Hewan --</option>
-                                </select>
-                            </div>
-                            <div style="margin-bottom: 8px;">
-                                <label style="font-size: 0.8rem; color: #1e3a8a;">Pilih Groomer (Hak Komisi 20%)</label>
-                                <select id="groomer_id" class="form-control" style="font-size: 0.85rem;" onchange="syncCheckoutAssignments()">
-                                    <?php foreach ($groomers as $g): ?>
-                                        <option value="<?php echo $g['id_user']; ?>">✂️ <?php echo htmlspecialchars($g['nama']); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="font-size: 0.8rem; color: #1e3a8a;">Catatan Kondisi</label>
-                                <input type="text" name="catatan_grooming" class="form-control" placeholder="Kutu/jamur/sensitivitas..." style="font-size: 0.85rem;">
-                            </div>
+                            <small style="color: #64748b;">Pembeli dapat tetap anonim atau memilih pelanggan tertentu untuk pencatatan riwayat.</small>
                         </div>
 
                         <!-- List Items Keranjang -->
@@ -317,7 +308,7 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
 
                             <div class="form-group" style="margin-bottom: 8px;">
                                 <label for="nominalBayar" style="font-size: 0.85rem; font-weight: 600;">Nominal Bayar / Uang Tunai</label>
-                                <input type="number" id="nominalBayar" class="form-control" placeholder="0" min="0" oninput="calculateChange()">
+                                <input type="number" id="nominalBayar" name="nominal_bayar" class="form-control" placeholder="0" min="0" oninput="calculateChange()">
                             </div>
 
                             <!-- Tombol Uang Pas / Cepat -->
@@ -348,75 +339,34 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
     </div>
 
     <script src="assets/js/adminator.js"></script>
-    <script src="assets/js/kasir.js"></script>
+    <script src="assets/js/kasir.js?v=3.2"></script>
     <script>
-        const allPetsData = <?php echo json_encode($allPets); ?>;
-        const pendingGroomingBookings = <?php echo json_encode($pendingGroomingQueues, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
-        let activeGroomingQueueId = null;
+        const stayCheckoutPayload = <?php echo json_encode($stayCheckoutPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+        let activeStayCheckoutId = null;
 
         function syncCheckoutAssignments() {
             document.getElementById('checkoutCustomerInput').value = document.getElementById('id_customer').value;
-            document.getElementById('checkoutPetInput').value = document.getElementById('id_hewan').value;
-            document.getElementById('checkoutGroomerInput').value = document.getElementById('groomer_id').value;
         }
 
-        function selectGroomingBooking(queueId) {
-            const queueInput = document.getElementById('groomingQueueInput');
-            if (activeGroomingQueueId) {
-                cart = cart.filter(item => !item.booked_queue_id);
-                activeGroomingQueueId = null;
-            }
-            queueInput.value = '';
+        function activateStayCheckout() {
+            if (!stayCheckoutPayload) return;
 
-            if (!queueId) {
-                document.getElementById('id_customer').disabled = false;
-                document.getElementById('id_hewan').disabled = false;
-                document.getElementById('groomer_id').disabled = false;
-                syncCheckoutAssignments();
-                renderCart();
-                return;
-            }
-
-            const booking = pendingGroomingBookings.find(item => String(item.id_grooming) === String(queueId));
-            if (!booking) return;
-
-            activeGroomingQueueId = String(booking.id_grooming);
-            queueInput.value = booking.id_grooming;
-            document.getElementById('id_customer').value = booking.id_customer;
-            onCustomerChange(booking.id_customer);
-            document.getElementById('id_hewan').value = booking.id_hewan;
-            document.getElementById('groomer_id').value = booking.id_groomer;
-            document.querySelector('[name="catatan_grooming"]').value = booking.catatan_kondisi || '';
+            activeStayCheckoutId = String(stayCheckoutPayload.id_inap);
+            document.getElementById('stayCheckoutInput').value = stayCheckoutPayload.id_inap;
+            document.getElementById('id_customer').value = stayCheckoutPayload.id_customer;
             document.getElementById('id_customer').disabled = true;
-            document.getElementById('id_hewan').disabled = true;
-            document.getElementById('groomer_id').disabled = true;
             syncCheckoutAssignments();
 
             cart.push({
-                id_barang: parseInt(booking.id_barang_layanan),
-                kode_barang: booking.kode_barang,
-                nama_barang: booking.nama_barang,
-                tipe_item: 'jasa',
-                harga_satuan: parseFloat(booking.harga_jual),
+                id_barang: parseInt(stayCheckoutPayload.hotel_item.id_barang),
+                kode_barang: stayCheckoutPayload.hotel_item.kode_barang,
+                nama_barang: stayCheckoutPayload.hotel_item.nama_barang + ' — ' + stayCheckoutPayload.nama_hewan,
+                tipe_item: 'kandang',
+                harga_satuan: parseFloat(stayCheckoutPayload.sisa_bayar),
                 jumlah: 1,
-                booked_queue_id: String(booking.id_grooming)
+                stay_checkout_id: activeStayCheckoutId
             });
             renderCart();
-        }
-
-        function onCustomerChange(custId) {
-            custId = parseInt(custId);
-            const petSelect = document.getElementById('id_hewan');
-            petSelect.innerHTML = '<option value="">-- Pilih Pasien Hewan --</option>';
-
-            const filteredPets = allPetsData.filter(p => parseInt(p.id_customer) === custId);
-            filteredPets.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id_hewan;
-                opt.textContent = `${p.nama_hewan} (${p.spesies} - ${p.ras || 'Mix'})`;
-                petSelect.appendChild(opt);
-            });
-            syncCheckoutAssignments();
         }
 
         function setQuickCash(val) {
@@ -443,11 +393,9 @@ $pendingGroomingQueues = $groomingModel->getPendingPaymentQueues();
             return true;
         }
 
-        // Inisialisasi dropdown hewan untuk customer pertama
-        const firstCust = document.getElementById('id_customer').value;
-        if (firstCust) {
-            onCustomerChange(firstCust);
-        }
+        syncCheckoutAssignments();
+        filterProducts('all');
+        activateStayCheckout();
     </script>
 </body>
 </html>

@@ -18,6 +18,7 @@ $pengaturanModel = new Pengaturan($db);
 
 $message = '';
 $message_type = '';
+$current_role = $_SESSION['user_role'];
 
 $hourly_penalty_rate = (float)($pengaturanModel->get('tarif_denda_overstay_per_jam') ?? 15000);
 
@@ -25,7 +26,10 @@ $hourly_penalty_rate = (float)($pengaturanModel->get('tarif_denda_overstay_per_j
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'create_booking') {
+    if ($current_role !== 'kasir') {
+        $message = 'Mode admin hanya untuk monitoring. Hanya kasir yang dapat mengubah booking dan status inap.';
+        $message_type = 'error';
+    } elseif ($action === 'create_booking') {
         $id_hewan = (int)$_POST['id_hewan'];
         $id_kandang = (int)$_POST['id_kandang'];
         $tgl_masuk = $_POST['tgl_masuk'];
@@ -60,16 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Gagal memproses check-in.";
             $message_type = 'error';
         }
-    } elseif ($action === 'check_out') {
+    } elseif ($action === 'prepare_checkout') {
         $id = (int)$_POST['id_inap'];
-        $total_bayar = (float)$_POST['total_biaya_akhir'];
-        $denda = (float)$_POST['biaya_denda_overstay'];
-
-        if ($inapModel->checkOut($id, $total_bayar, $denda)) {
-            $message = "Check-Out berhasil! Kamar telah dibersihkan dan kembali tersedia.";
-            $message_type = 'success';
+        if ($inapModel->prepareCheckout($id, $hourly_penalty_rate)) {
+            header('Location: penjualan.php?stay_checkout=' . $id);
+            exit();
         } else {
-            $message = "Gagal memproses check-out.";
+            $message = "Gagal menyiapkan pembayaran. Pastikan status inap masih Check-In.";
             $message_type = 'error';
         }
     } elseif ($action === 'cancel') {
@@ -131,7 +132,7 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
 <body>
     <div class="main-container">
         <?php 
-        $role = $_SESSION['user_role'];
+        $role = $current_role;
         require_once 'sidebar.php'; 
         ?>
         <main class="main-content">
@@ -144,7 +145,11 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                         <div class="breadcrumb-nav">Reservasi Kamar Kandang & Otomasi Denda Overstay Per Jam</div>
                     </div>
                     <div class="page-actions">
+                        <?php if ($current_role === 'kasir'): ?>
                         <button class="btn btn-primary" onclick="openBookingModal()"><i class="bi bi-plus-lg"></i> Reservasi / Check-In Baru</button>
+                        <?php else: ?>
+                        <span class="badge badge-info">Mode monitoring admin</span>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -158,6 +163,7 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                     <a href="booking_inap.php" class="btn btn-sm <?php echo empty($status_filter) ? 'btn-primary' : 'btn-secondary'; ?>">Semua</a>
                     <a href="booking_inap.php?status=Check-In" class="btn btn-sm <?php echo ($status_filter === 'Check-In') ? 'btn-primary' : 'btn-secondary'; ?>">Sedang Inap (Aktif)</a>
                     <a href="booking_inap.php?status=Booking" class="btn btn-sm <?php echo ($status_filter === 'Booking') ? 'btn-primary' : 'btn-secondary'; ?>">Booking Menunggu Masuk</a>
+                    <a href="booking_inap.php?status=Menunggu_Pembayaran" class="btn btn-sm <?php echo ($status_filter === 'Menunggu_Pembayaran') ? 'btn-primary' : 'btn-secondary'; ?>">Menunggu Pembayaran</a>
                     <a href="booking_inap.php?status=Selesai" class="btn btn-sm <?php echo ($status_filter === 'Selesai') ? 'btn-primary' : 'btn-secondary'; ?>">Selesai Checkout</a>
                 </div>
 
@@ -198,13 +204,13 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <span class="badge badge-<?php 
                                 echo ($stay['status_inap'] === 'Check-In') ? 'success' : 
-                                     (($stay['status_inap'] === 'Booking') ? 'warning' : 
+                                     (in_array($stay['status_inap'], ['Booking', 'Menunggu_Pembayaran'], true) ? 'warning' :
                                      (($stay['status_inap'] === 'Selesai') ? 'secondary' : 'danger')); 
                             ?>">
-                                <?php echo $stay['status_inap']; ?>
+                                <?php echo str_replace('_', ' ', $stay['status_inap']); ?>
                             </span>
 
-                            <?php if ($stay['status_inap'] === 'Booking'): ?>
+                            <?php if ($current_role === 'kasir' && $stay['status_inap'] === 'Booking'): ?>
                                 <form method="POST" style="margin: 0;">
                                     <input type="hidden" name="action" value="check_in">
                                     <input type="hidden" name="id_inap" value="<?php echo $stay['id_inap']; ?>">
@@ -215,10 +221,14 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                                     <input type="hidden" name="id_inap" value="<?php echo $stay['id_inap']; ?>">
                                     <button type="submit" class="btn btn-sm btn-danger">Batal</button>
                                 </form>
-                            <?php elseif ($stay['status_inap'] === 'Check-In'): ?>
+                            <?php elseif ($current_role === 'kasir' && $stay['status_inap'] === 'Check-In'): ?>
                                 <button class="btn btn-sm btn-info" onclick='openCheckoutModal(<?php echo $stay['id_inap']; ?>, <?php echo json_encode($stay); ?>)'>
                                     Proses Check-Out & Hitung Denda
                                 </button>
+                            <?php elseif ($current_role === 'kasir' && $stay['status_inap'] === 'Menunggu_Pembayaran'): ?>
+                                <a class="btn btn-sm btn-primary" href="penjualan.php?stay_checkout=<?php echo (int)$stay['id_inap']; ?>">Lanjutkan Pembayaran</a>
+                            <?php elseif ($current_role === 'admin' && in_array($stay['status_inap'], ['Booking', 'Check-In', 'Menunggu_Pembayaran'], true)): ?>
+                                <small style="color: #64748b;">Hanya monitoring</small>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -230,11 +240,13 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                             <i class="bi bi-building-check" style="font-size: 42px; color: #cbd5e1;"></i>
                             <h4>Tidak Ada Data Rawat Inap</h4>
                             <p>Belum ada hewan anabul yang terdaftar pada filter reservasi ini.</p>
+                            <?php if ($current_role === 'kasir'): ?>
                             <div style="margin-top: 16px;">
                                 <button type="button" class="btn btn-primary" onclick="openBookingModal()">
                                     <i class="bi bi-plus-lg"></i> Check-In / Booking Anabul
                                 </button>
                             </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -243,6 +255,7 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
         </main>
     </div>
 
+    <?php if ($current_role === 'kasir'): ?>
     <!-- Modal Booking / Check-in Baru -->
     <div id="bookingModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
         <div class="modal-content" style="background: white; border-radius: 12px; width: 100%; max-width: 550px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
@@ -331,19 +344,19 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
             </div>
 
             <form method="POST" id="checkoutForm">
-                <input type="hidden" name="action" value="check_out">
+                <input type="hidden" name="action" value="prepare_checkout">
                 <input type="hidden" name="id_inap" id="co_id_inap">
-                <input type="hidden" name="biaya_denda_overstay" id="co_denda">
-                <input type="hidden" name="total_biaya_akhir" id="co_total_akhir">
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px;">
                     <button type="button" class="btn btn-secondary" onclick="closeCheckoutModal()">Batal</button>
-                    <button type="submit" class="btn btn-success">Pelunasan & Selesaikan Check-Out</button>
+                    <button type="submit" class="btn btn-success">Lanjutkan ke Kasir POS</button>
                 </div>
             </form>
         </div>
     </div>
+    <?php endif; ?>
 
+    <?php if ($current_role === 'kasir'): ?>
     <script>
         function openBookingModal() {
             document.getElementById('bookingModal').style.display = 'flex';
@@ -380,9 +393,6 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
             const totalAkhir = biayaKamar + biayaPakan + denda;
             const sisaBayar = Math.max(0, totalAkhir - dp);
 
-            document.getElementById('co_denda').value = denda;
-            document.getElementById('co_total_akhir').value = totalAkhir;
-
             let html = `
                 <div><strong>Nama Hewan:</strong> ${stay.nama_hewan} (${stay.spesies})</div>
                 <div><strong>Kamar:</strong> ${stay.nomor_kandang} (${stay.ukuran})</div>
@@ -404,6 +414,7 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                 <div style="font-size: 1.15rem; color: #0284c7; font-weight: bold; margin-top: 5px;">
                     Sisa Pelunasan: ${formatRp(sisaBayar)}
                 </div>
+                <small>Tagihan akan dibawa ke POS. Status selesai dan kamar tersedia setelah pembayaran berhasil.</small>
             `;
 
             document.getElementById('billSummary').innerHTML = html;
@@ -414,6 +425,7 @@ $pets = $hewanModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
             return 'Rp ' + Number(num).toLocaleString('id-ID');
         }
     </script>
+    <?php endif; ?>
     <script src="assets/js/adminator.js"></script>
 </body>
 </html>

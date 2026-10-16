@@ -18,9 +18,7 @@ if ($_POST) {
         switch ($_POST['action']) {
             case 'create':
                 $vendor->nama_vendor = sanitizeInput($_POST['nama_vendor']);
-                $vendor->alamat = sanitizeInput($_POST['alamat']);
-                $vendor->telepon = sanitizeInput($_POST['telepon']);
-                $vendor->email = sanitizeInput($_POST['email']);
+                $vendor->kontak = sanitizeInput($_POST['kontak'] ?? '');
 
                 if ($vendor->create()) {
                     $message = 'vendor berhasil ditambahkan!';
@@ -34,9 +32,7 @@ if ($_POST) {
             case 'update':
                 $vendor->id = sanitizeInput($_POST['id']);
                 $vendor->nama_vendor = sanitizeInput($_POST['nama_vendor']);
-                $vendor->alamat = sanitizeInput($_POST['alamat']);
-                $vendor->telepon = sanitizeInput($_POST['telepon']);
-                $vendor->email = sanitizeInput($_POST['email']);
+                $vendor->kontak = sanitizeInput($_POST['kontak'] ?? '');
 
                 if ($vendor->update()) {
                     $message = 'vendor berhasil diperbarui!';
@@ -112,21 +108,9 @@ $stmt = $vendor->readAll();
                                     <input type="text" id="nama_vendor" name="nama_vendor" required class="form-control">
                                 </div>
                                 <div class="form-group">
-                                    <label for="telepon">Telepon</label>
-                                    <input type="text" id="telepon" name="telepon" class="form-control">
+                                    <label for="kontak">Kontak (telepon atau email)</label>
+                                    <input type="text" id="kontak" name="kontak" class="form-control" placeholder="Nomor telepon atau email">
                                 </div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="email">Email</label>
-                                    <input type="email" id="email" name="email" class="form-control">
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="alamat">Alamat</label>
-                                <textarea id="alamat" name="alamat" rows="2" class="form-control"></textarea>
                             </div>
 
                             <button type="submit" class="btn btn-primary">Tambah Vendor</button>
@@ -143,9 +127,7 @@ $stmt = $vendor->readAll();
                             <tr>
                                 <th>ID</th>
                                 <th>Nama vendor</th>
-                                <th>Alamat</th>
-                                <th>Telepon</th>
-                                <th>Email</th>
+                                <th>Kontak</th>
                                 <th>Tanggal Dibuat</th>
                                 <th>Aksi</th>
                             </tr>
@@ -153,16 +135,14 @@ $stmt = $vendor->readAll();
                         <tbody>
                             <?php while ($row = $stmt->fetch(PDO::FETCH_ASSOC)): ?>
                             <tr>
-                                <td><?php echo $row['id']; ?></td>
-                                <td><?php echo $row['nama_vendor']; ?></td>
-                                <td><?php echo $row['alamat'] ?: '-'; ?></td>
-                                <td><?php echo $row['telepon'] ?: '-'; ?></td>
-                                <td><?php echo $row['email'] ?: '-'; ?></td>
+                                <td><?php echo (int)$row['id']; ?></td>
+                                <td><?php echo htmlspecialchars($row['nama_vendor']); ?></td>
+                                <td><?php echo htmlspecialchars($row['kontak'] ?: '-'); ?></td>
                                 <td><?php echo date('d/m/Y', strtotime($row['created_at'])); ?></td>
                                 <td>
-                                    <button onclick="editvendor(<?php echo htmlspecialchars(json_encode($row)); ?>)" 
+                                    <button onclick='editvendor(<?php echo htmlspecialchars(json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, "UTF-8"); ?>)'
                                             class="btn btn-warning btn-sm">Edit</button>
-                                    <button onclick="deletevendor(<?php echo $row['id']; ?>)" 
+                                    <button onclick="deletevendor(<?php echo (int)$row['id']; ?>)"
                                             class="btn btn-danger btn-sm">Hapus</button>
                                 </td>
                             </tr>
@@ -190,21 +170,9 @@ $stmt = $vendor->readAll();
                         <input type="text" id="edit_nama_vendor" name="nama_vendor" required>
                     </div>
                     <div class="form-group">
-                        <label for="edit_telepon">Telepon</label>
-                        <input type="text" id="edit_telepon" name="telepon">
+                        <label for="edit_kontak">Kontak (telepon atau email)</label>
+                        <input type="text" id="edit_kontak" name="kontak">
                     </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="edit_email">Email</label>
-                        <input type="email" id="edit_email" name="email">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="edit_alamat">Alamat</label>
-                    <textarea id="edit_alamat" name="alamat" rows="3"></textarea>
                 </div>
 
                 <div style="display: flex; gap: 10px;">
@@ -219,9 +187,7 @@ $stmt = $vendor->readAll();
         function editvendor(data) {
             document.getElementById('edit_id').value = data.id;
             document.getElementById('edit_nama_vendor').value = data.nama_vendor;
-            document.getElementById('edit_alamat').value = data.alamat;
-            document.getElementById('edit_telepon').value = data.telepon;
-            document.getElementById('edit_email').value = data.email;
+            document.getElementById('edit_kontak').value = data.kontak || '';
             document.getElementById('editModal').style.display = 'block';
         }
 

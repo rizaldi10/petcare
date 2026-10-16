@@ -18,7 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         'alamat_toko' => sanitizeInput($_POST['alamat_toko'] ?? ''),
         'telepon_toko' => sanitizeInput($_POST['telepon_toko'] ?? ''),
         'email_toko' => sanitizeInput($_POST['email_toko'] ?? ''),
-        'persentase_komisi_groomer' => sanitizeInput($_POST['persentase_komisi_groomer'] ?? '20'),
         'tarif_denda_overstay_per_jam' => sanitizeInput($_POST['tarif_denda_overstay_per_jam'] ?? '15000'),
         'footer_struk' => sanitizeInput($_POST['footer_struk'] ?? ''),
         'warna_primary' => sanitizeInput($_POST['warna_primary'] ?? '#0284c7'),
@@ -64,7 +63,7 @@ $settings = $pengaturan->getAll();
                 <div class="page-header">
                     <div>
                         <h1 class="page-title"><i class="bi bi-sliders2"></i> Pengaturan Bisnis & Tampilan Sistem</h1>
-                        <div class="breadcrumb-nav">Konfigurasi Toko, Tarif Denda Overstay, Persentase Komisi Groomer & Warna Tema</div>
+                        <div class="breadcrumb-nav">Konfigurasi toko, tarif denda overstay, dan warna tema</div>
                     </div>
                 </div>
 
@@ -107,15 +106,9 @@ $settings = $pengaturan->getAll();
                         </div>
 
                         <h3 style="color: #0284c7; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">
-                            🐾 Pengaturan Komisi Groomer & Denda Pet Hotel
+                            🏨 Pengaturan Denda Pet Hotel
                         </h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
-                            <div class="form-group">
-                                <label for="persentase_komisi_groomer">Persentase Komisi Groomer (%)</label>
-                                <input type="number" id="persentase_komisi_groomer" name="persentase_komisi_groomer" class="form-control"
-                                       value="<?php echo htmlspecialchars($settings['persentase_komisi_groomer'] ?? '20'); ?>" min="0" max="100" step="1" required>
-                                <small style="color: #64748b;">Dihitung otomatis saat transaksi jasa grooming selesai di kasir.</small>
-                            </div>
+                        <div style="margin-bottom: 25px;">
                             <div class="form-group">
                                 <label for="tarif_denda_overstay_per_jam">Tarif Denda Overstay Hotel (Rp/Jam)</label>
                                 <input type="number" id="tarif_denda_overstay_per_jam" name="tarif_denda_overstay_per_jam" class="form-control"

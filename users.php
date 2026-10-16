@@ -23,7 +23,10 @@ if ($_POST) {
                 $user->email = sanitizeInput($_POST['email']);
                 $user->role = sanitizeInput($_POST['role']);
 
-                if ($user->create()) {
+                if (!in_array($user->role, ['admin', 'kasir'], true)) {
+                    $message = 'Role pengguna tidak valid.';
+                    $message_type = 'error';
+                } elseif ($user->create()) {
                     $message = 'User berhasil ditambahkan!';
                     $message_type = 'success';
                 } else {
@@ -39,7 +42,10 @@ if ($_POST) {
                 $user->email = sanitizeInput($_POST['email']);
                 $user->role = sanitizeInput($_POST['role']);
 
-                if ($user->update()) {
+                if (!in_array($user->role, ['admin', 'kasir'], true)) {
+                    $message = 'Role pengguna tidak valid.';
+                    $message_type = 'error';
+                } elseif ($user->update()) {
                     $message = 'User berhasil diperbarui!';
                     $message_type = 'success';
                 } else {
@@ -103,7 +109,7 @@ $stmt = $user->readAll();
                 <div class="page-header">
                     <div>
                         <h1 class="page-title"><i class="bi bi-shield-lock-fill"></i> Manajemen Pengguna & Hak Akses</h1>
-                        <div class="breadcrumb-nav">Kelola Akun Administrator, Kasir POS, dan Staf Groomer</div>
+                        <div class="breadcrumb-nav">Kelola Akun Administrator dan Kasir POS</div>
                     </div>
                 </div>
 
@@ -149,7 +155,6 @@ $stmt = $user->readAll();
                                         <option value="">Pilih Role</option>
                                         <option value="admin">Administrator</option>
                                         <option value="kasir">Kasir POS</option>
-                                        <option value="groomer">Groomer (Salon Anabul)</option>
                                     </select>
                                 </div>
                             </div>
@@ -183,11 +188,11 @@ $stmt = $user->readAll();
                                 <td><?php echo $row['nama_lengkap']; ?></td>
                                 <td><?php echo $row['email'] ?: '-'; ?></td>
                                 <td>
-                                    <span class="badge <?php 
-                                        echo $row['role'] === 'admin' ? 'badge-danger' : 
-                                            ($row['role'] === 'kasir' ? 'badge-success' : 'badge-warning'); 
+                                    <span class="badge <?php
+                                        echo $row['role'] === 'admin' ? 'badge-danger' :
+                                            ($row['role'] === 'kasir' ? 'badge-success' : 'badge-warning');
                                     ?>">
-                                        <?php echo ucfirst($row['role']); ?>
+                                        <?php echo in_array($row['role'], ['admin', 'kasir'], true) ? ucfirst($row['role']) : 'Nonaktif'; ?>
                                     </span>
                                 </td>
                                 <td><?php echo date('d/m/Y', strtotime($row['created_at'])); ?></td>
@@ -241,7 +246,6 @@ $stmt = $user->readAll();
                         <select id="edit_role" name="role" required>
                             <option value="admin">Administrator</option>
                             <option value="kasir">Kasir POS</option>
-                            <option value="groomer">Groomer (Salon Anabul)</option>
                         </select>
                     </div>
                 </div>

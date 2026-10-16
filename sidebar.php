@@ -54,15 +54,6 @@ $user_role = $_SESSION['user_role'] ?? 'guest';
         </li>
         <?php endif; ?>
 
-        <li class="nav-item">
-            <a href="antrean_grooming.php" class="nav-link <?php echo ($current_page === 'antrean_grooming.php') ? 'active' : ''; ?>" title="Antrean Grooming">
-                <div class="nav-link-content">
-                    <i class="bi bi-scissors"></i>
-                    <span class="nav-text">Antrean Grooming</span>
-                </div>
-            </a>
-        </li>
-
         <?php if ($user_role === 'admin' || $user_role === 'kasir'): ?>
         <li class="nav-item">
             <a href="customer.php" class="nav-link <?php echo ($current_page === 'customer.php') ? 'active' : ''; ?>" title="Pelanggan & Hewan">

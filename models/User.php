@@ -18,7 +18,7 @@ class User {
     public function login($username, $password) {
         $query = "SELECT id_user, username, password, nama, role 
                   FROM " . $this->table_name . " 
-                  WHERE username = :username LIMIT 1";
+                  WHERE username = :username AND role IN ('admin', 'kasir') LIMIT 1";
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':username', $username);
@@ -71,16 +71,6 @@ class User {
         $stmt->execute();
 
         return $stmt;
-    }
-
-    public function getGroomers() {
-        $query = "SELECT id_user, id_user as id, nama, username 
-                  FROM " . $this->table_name . " 
-                  WHERE role = 'groomer' 
-                  ORDER BY nama ASC";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function readOne($id = null) {

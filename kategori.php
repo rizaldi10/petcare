@@ -18,7 +18,6 @@ if ($_POST) {
         switch ($_POST['action']) {
             case 'create':
                 $kategori->nama_kategori = sanitizeInput($_POST['nama_kategori']);
-                $kategori->deskripsi = sanitizeInput($_POST['deskripsi']);
 
                 if ($kategori->create()) {
                     $message = 'Kategori barang berhasil ditambahkan!';
@@ -32,7 +31,6 @@ if ($_POST) {
             case 'update':
                 $kategori->id = sanitizeInput($_POST['id']);
                 $kategori->nama_kategori = sanitizeInput($_POST['nama_kategori']);
-                $kategori->deskripsi = sanitizeInput($_POST['deskripsi']);
 
                 if ($kategori->update()) {
                     $message = 'Kategori barang berhasil diperbarui!';
@@ -85,7 +83,7 @@ $stmt = $kategori->readAll();
                 <div class="page-header">
                     <div>
                         <h1 class="page-title"><i class="bi bi-folder2-open"></i> Kategori Produk & Layanan</h1>
-                        <div class="breadcrumb-nav">Klasifikasi Pakan, Aksesoris, Jasa Grooming & Kamar</div>
+                        <div class="breadcrumb-nav">Klasifikasi produk pakan, aksesoris, dan item kamar</div>
                     </div>
                 </div>
 
@@ -108,11 +106,6 @@ $stmt = $kategori->readAll();
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="deskripsi">Deskripsi</label>
-                            <textarea id="deskripsi" name="deskripsi" rows="3"></textarea>
-                        </div>
-
                         <button type="submit" class="btn btn-primary">Tambah Kategori</button>
                     </form>
                     </div>
@@ -127,22 +120,20 @@ $stmt = $kategori->readAll();
                             <tr>
                                 <th>ID</th>
                                 <th>Nama Kategori</th>
-                                <th>Deskripsi</th>
-                                <th>Tanggal Dibuat</th>
+                                <th>Jumlah Produk / Layanan</th>
                                 <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php while ($row = $stmt->fetch(PDO::FETCH_ASSOC)): ?>
                             <tr>
-                                <td><?php echo $row['id']; ?></td>
-                                <td><?php echo $row['nama_kategori']; ?></td>
-                                <td><?php echo $row['deskripsi'] ?: '-'; ?></td>
-                                <td><?php echo date('d/m/Y', strtotime($row['created_at'])); ?></td>
+                                <td><?php echo (int)$row['id']; ?></td>
+                                <td><?php echo htmlspecialchars($row['nama_kategori']); ?></td>
+                                <td><?php echo (int)$row['total_barang']; ?> item</td>
                                 <td>
-                                    <button onclick="editKategori(<?php echo htmlspecialchars(json_encode($row)); ?>)" 
+                                    <button onclick='editKategori(<?php echo htmlspecialchars(json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, "UTF-8"); ?>)'
                                             class="btn btn-warning btn-sm">Edit</button>
-                                    <button onclick="deleteKategori(<?php echo $row['id']; ?>)" 
+                                    <button onclick="deleteKategori(<?php echo (int)$row['id']; ?>)"
                                             class="btn btn-danger btn-sm">Hapus</button>
                                 </td>
                             </tr>
@@ -169,11 +160,6 @@ $stmt = $kategori->readAll();
                     <input type="text" id="edit_nama_kategori" name="nama_kategori" required>
                 </div>
 
-                <div class="form-group">
-                    <label for="edit_deskripsi">Deskripsi</label>
-                    <textarea id="edit_deskripsi" name="deskripsi" rows="3"></textarea>
-                </div>
-
                 <div style="display: flex; gap: 10px;">
                     <button type="submit" class="btn btn-primary">Update</button>
                     <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Batal</button>
@@ -186,7 +172,6 @@ $stmt = $kategori->readAll();
         function editKategori(data) {
             document.getElementById('edit_id').value = data.id;
             document.getElementById('edit_nama_kategori').value = data.nama_kategori;
-            document.getElementById('edit_deskripsi').value = data.deskripsi;
             document.getElementById('editModal').style.display = 'block';
         }
 

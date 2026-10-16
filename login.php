@@ -25,12 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['nama_lengkap'] = $user->nama;
             $_SESSION['user_role'] = $user->role;
             
-            // Redirect sesuai role
-            if ($user->role === 'groomer') {
-                header('Location: antrean_grooming.php');
-            } else {
-                header('Location: dashboard.php');
-            }
+            header('Location: dashboard.php');
             exit();
         } else {
             $error_message = 'Username atau password salah!';
@@ -86,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <p><strong>Akun Demo Staf Internal (Password: <code>password</code>):</strong></p>
                 <p>• Admin: <code>admin</code></p>
                 <p>• Kasir: <code>kasir1</code></p>
-                <p>• Groomer: <code>groomer1</code></p>
 
                 <div style="margin-top: 15px; padding-top: 12px; border-top: 1px dashed #e2e8f0;">
                     <a href="portal/index.php" style="color: #0284c7; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">

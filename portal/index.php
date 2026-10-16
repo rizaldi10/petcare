@@ -2,18 +2,33 @@
 require_once dirname(__DIR__) . '/config/config.php';
 require_once dirname(__DIR__) . '/models/Customer.php';
 require_once dirname(__DIR__) . '/models/Hewan.php';
-require_once dirname(__DIR__) . '/models/Grooming.php';
 require_once dirname(__DIR__) . '/models/Inap.php';
 
 $database = new Database();
 $db = $database->getConnection();
 $customerModel = new Customer($db);
 $hewanModel = new Hewan($db);
-$groomingModel = new Grooming($db);
 $inapModel = new Inap($db);
 
 $error_message = '';
 $success_message = '';
+$resetToken = $_GET['reset'] ?? '';
+
+// Upgrade database portal yang sudah terpasang sebelum fitur reset password.
+try {
+    $db->exec("ALTER TABLE customer ADD COLUMN email VARCHAR(150) NULL");
+} catch (PDOException $e) {
+    if (strpos(strtolower($e->getMessage()), 'duplicate column') === false) throw $e;
+}
+$db->exec("CREATE TABLE IF NOT EXISTS customer_password_resets (
+    id_reset INT AUTO_INCREMENT PRIMARY KEY,
+    id_customer INT NOT NULL,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_customer) REFERENCES customer(id_customer) ON DELETE CASCADE,
+    INDEX idx_customer_reset_expiry (expires_at)
+) ENGINE=InnoDB");
 
 // Handle Portal Logout
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
@@ -47,12 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $telepon = sanitizeInput($_POST['telepon']);
         $password = $_POST['password'];
         $alamat = sanitizeInput($_POST['alamat'] ?? '');
+        $email = strtolower(trim($_POST['email'] ?? ''));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error_message = 'Masukkan alamat email yang valid untuk akun Anda.';
+        } else {
 
         $newId = $customerModel->create([
             'nama_customer' => $nama,
             'telepon' => $telepon,
             'password' => $password,
-            'alamat' => $alamat
+            'alamat' => $alamat,
+            'email' => $email
         ]);
 
         if ($newId) {
@@ -64,18 +84,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error_message = 'Pendaftaran gagal. Pastikan data terisi lengkap.';
         }
+        }
+    } elseif ($auth_action === 'forgot_password') {
+        $email = trim($_POST['email'] ?? '');
+        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $token = bin2hex(random_bytes(32));
+            if ($customerModel->createPasswordReset($email, hash('sha256', $token))) {
+                $link = rtrim(BASE_URL, '/') . '/portal/index.php?reset=' . urlencode($token);
+                $subject = 'Reset password akun PetCare';
+                $body = "Halo,\n\nGunakan tautan berikut untuk membuat password baru (berlaku 1 jam):\n$link\n\nJika Anda tidak meminta reset, abaikan email ini.";
+                $headers = "From: " . (getenv('PETCARE_FROM_EMAIL') ?: 'noreply@petcare.local') . "\r\n" . "Content-Type: text/plain; charset=UTF-8";
+                @mail($email, $subject, $body, $headers);
+            }
+        }
+        $success_message = 'Jika email terdaftar, tautan reset password akan dikirim.';
+    } elseif ($auth_action === 'reset_password') {
+        $token = $_POST['token'] ?? '';
+        $password = $_POST['password'] ?? '';
+        if (strlen($password) < 8) {
+            $error_message = 'Password baru minimal 8 karakter.';
+        } elseif ($customerModel->resetPassword(hash('sha256', $token), $password)) {
+            $resetToken = '';
+            $success_message = 'Password berhasil diubah. Silakan masuk dengan password baru.';
+        } else {
+            $error_message = 'Tautan reset tidak valid atau sudah kedaluwarsa.';
+        }
     }
 }
 
 $is_logged_in = isCustomerLoggedIn();
 $customer_id = $_SESSION['customer_id'] ?? null;
 $my_pets = [];
-$active_groomings = [];
 $active_stays = [];
 
 if ($is_logged_in) {
     $my_pets = $customerModel->getPets($customer_id);
-    $active_groomings = $groomingModel->getTrackByCustomer($customer_id);
     $active_stays = $inapModel->getCustomerBookings($customer_id);
 }
 ?>
@@ -98,7 +141,6 @@ if ($is_logged_in) {
                 <a href="index.php" class="portal-link active">Beranda</a>
                 <a href="my_pets.php" class="portal-link">Anabul Saya</a>
                 <a href="booking.php" class="portal-link">Booking Online</a>
-                <a href="track.php" class="portal-link">Pantau Perawatan (Live)</a>
                 <a href="riwayat.php" class="portal-link">Riwayat Struk</a>
                 <a href="index.php?action=logout" class="portal-link" style="color: #ef4444;">Keluar</a>
             <?php else: ?>
@@ -115,7 +157,7 @@ if ($is_logged_in) {
                     <div style="font-size: 3rem; margin-bottom: 10px;">🐶🐱</div>
                     <h2 style="margin: 0; color: #0284c7;">Portal Mandiri Pelanggan</h2>
                     <p style="color: #64748b; font-size: 0.95rem; margin-top: 5px;">
-                        Masuk untuk mendaftarkan profil anabul, reservasi kamar hotel, & pelacakan live grooming.
+                        Masuk untuk mendaftarkan profil anabul dan reservasi kamar hotel.
                     </p>
                 </div>
 
@@ -124,6 +166,20 @@ if ($is_logged_in) {
                         <?php echo $error_message; ?>
                     </div>
                 <?php endif; ?>
+                <?php if ($success_message): ?>
+                    <div style="background: #dcfce7; color: #166534; padding: 10px 14px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;"><?php echo htmlspecialchars($success_message); ?></div>
+                <?php endif; ?>
+
+                <?php if ($resetToken !== ''): ?>
+                    <h3>Buat Password Baru</h3>
+                    <form method="POST">
+                        <input type="hidden" name="auth_action" value="reset_password">
+                        <input type="hidden" name="token" value="<?php echo htmlspecialchars($resetToken, ENT_QUOTES, 'UTF-8'); ?>">
+                        <label>Password baru (minimal 8 karakter)</label>
+                        <input type="password" name="password" minlength="8" required style="width:100%;box-sizing:border-box;padding:10px;margin:10px 0 16px">
+                        <button type="submit" class="portal-btn" style="width:100%;padding:12px">Simpan Password Baru</button>
+                    </form>
+                <?php else: ?>
 
                 <!-- Tab Login / Daftar -->
                 <div style="display: flex; border-bottom: 2px solid #e2e8f0; margin-bottom: 20px;">
@@ -153,6 +209,13 @@ if ($is_logged_in) {
                     <div style="margin-top: 15px; font-size: 0.85rem; color: #64748b; text-align: center;">
                         Demo: Telp <code>081234567890</code> / Password: <code>password</code>
                     </div>
+                    <button type="button" onclick="document.getElementById('forgotForm').style.display='block'" style="display:block;margin:12px auto 0;background:none;border:0;color:#0284c7;cursor:pointer">Lupa password?</button>
+                </form>
+                <form method="POST" id="forgotForm" style="display:none;margin-top:16px">
+                    <input type="hidden" name="auth_action" value="forgot_password">
+                    <label>Email yang terdaftar</label>
+                    <input type="email" name="email" required style="width:100%;box-sizing:border-box;padding:10px;margin:8px 0 12px">
+                    <button type="submit" class="portal-btn" style="width:100%;padding:10px">Kirim Tautan Reset</button>
                 </form>
 
                 <!-- Form Register -->
@@ -167,6 +230,10 @@ if ($is_logged_in) {
                         <input type="text" name="telepon" required style="width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1;" placeholder="08xxxxxxxxxx">
                     </div>
                     <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Email (untuk pemulihan akun)</label>
+                        <input type="email" name="email" required style="width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1;" placeholder="nama@email.com">
+                    </div>
+                    <div style="margin-bottom: 12px;">
                         <label style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Password</label>
                         <input type="password" name="password" required style="width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1;" placeholder="Minimal 6 karakter">
                     </div>
@@ -178,6 +245,7 @@ if ($is_logged_in) {
                         Daftar Akun Baru
                     </button>
                 </form>
+                <?php endif; ?>
             </div>
         <?php else: ?>
             <!-- Dashboard Pelanggan Setelah Login -->
@@ -192,39 +260,11 @@ if ($is_logged_in) {
                         </p>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        <a href="booking.php" class="portal-btn">+ Booking Hotel / Grooming</a>
+                        <a href="booking.php" class="portal-btn">+ Booking Hotel</a>
                         <a href="my_pets.php" class="portal-btn portal-btn-secondary">Kelola Anabul</a>
                     </div>
                 </div>
             </div>
-
-            <!-- Status Perawatan Aktif Saat Ini (Live Alert) -->
-            <?php if (!empty($active_groomings)): ?>
-                <?php 
-                $latestGrooming = $active_groomings[0];
-                if ($latestGrooming['status_pengerjaan'] !== 'Selesai'):
-                ?>
-                <div class="portal-card" style="border-left: 6px solid #0284c7;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div>
-                            <span style="background: #0284c7; color: white; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;">
-                                🔴 Live Status Grooming
-                            </span>
-                            <h3 style="margin: 8px 0 4px 0; color: #0f172a;">
-                                Anabul <strong><?php echo htmlspecialchars($latestGrooming['nama_hewan']); ?></strong> sedang dalam tahap: 
-                                <span style="color: #0284c7;"><?php echo str_replace('_', ' ', $latestGrooming['status_pengerjaan']); ?></span>
-                            </h3>
-                            <div style="font-size: 0.9rem; color: #64748b;">
-                                Groomer: ✂️ <?php echo htmlspecialchars($latestGrooming['nama_groomer']); ?> • Layanan: <?php echo htmlspecialchars($latestGrooming['nama_layanan']); ?>
-                            </div>
-                        </div>
-                        <a href="track.php" class="portal-btn" style="background: #0284c7;">
-                            Lihat Timeline Live &rarr;
-                        </a>
-                    </div>
-                </div>
-                <?php endif; ?>
-            <?php endif; ?>
 
             <!-- Grid Ringkasan Anabul -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -259,9 +299,6 @@ if ($is_logged_in) {
                     <div style="margin-top: 15px; border-top: 1px solid #f1f5f9; padding-top: 10px; display: flex; justify-content: space-between;">
                         <a href="booking.php?pet_id=<?php echo $pet['id_hewan']; ?>" style="font-size: 0.85rem; color: #0284c7; font-weight: 600; text-decoration: none;">
                             🏨 Reservasi Inap &rarr;
-                        </a>
-                        <a href="track.php?pet_id=<?php echo $pet['id_hewan']; ?>" style="font-size: 0.85rem; color: #10b981; font-weight: 600; text-decoration: none;">
-                            ✂️ Riwayat Grooming
                         </a>
                     </div>
                 </div>

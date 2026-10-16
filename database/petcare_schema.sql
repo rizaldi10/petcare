@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     nama VARCHAR(100) NOT NULL,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'kasir', 'groomer') NOT NULL,
+    role ENUM('admin', 'kasir') NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -16,10 +16,21 @@ CREATE TABLE IF NOT EXISTS customer (
     id_customer INT AUTO_INCREMENT PRIMARY KEY,
     nama_customer VARCHAR(100) NOT NULL,
     telepon VARCHAR(20) NOT NULL,
+    email VARCHAR(150) NULL,
     alamat TEXT NULL,
     password VARCHAR(255) NULL,
     is_active TINYINT(1) DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS customer_password_resets (
+    id_reset INT AUTO_INCREMENT PRIMARY KEY,
+    id_customer INT NOT NULL,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_customer) REFERENCES customer(id_customer) ON DELETE CASCADE,
+    INDEX idx_customer_reset_expiry (expires_at)
 ) ENGINE=InnoDB;
 
 -- 3. Entitas Hewan Peliharaan (Child of Customer)
@@ -52,13 +63,13 @@ CREATE TABLE IF NOT EXISTS kategori_barang (
     nama_kategori VARCHAR(100) NOT NULL
 ) ENGINE=InnoDB;
 
--- 6. Master Produk, Jasa, & Fasilitas
+-- 6. Master Produk & Fasilitas
 CREATE TABLE IF NOT EXISTS barang (
     id_barang INT AUTO_INCREMENT PRIMARY KEY,
     id_kategori INT NOT NULL,
     kode_barang VARCHAR(50) NOT NULL UNIQUE,
     nama_barang VARCHAR(150) NOT NULL,
-    tipe_item ENUM('retail', 'repack', 'jasa', 'kandang') NOT NULL DEFAULT 'retail',
+    tipe_item ENUM('retail', 'repack', 'kandang') NOT NULL DEFAULT 'retail',
     stok INT DEFAULT 0,
     berat_gram INT NULL DEFAULT 0,
     harga_beli DECIMAL(12,2) DEFAULT 0.00,
@@ -104,25 +115,10 @@ CREATE TABLE IF NOT EXISTS reservasi_inap (
     uang_muka_dp DECIMAL(12,2) DEFAULT 0.00,
     biaya_denda_overstay DECIMAL(12,2) DEFAULT 0.00,
     total_biaya_akhir DECIMAL(12,2) NULL,
-    status_inap ENUM('Booking', 'Check-In', 'Selesai', 'Batal') NOT NULL DEFAULT 'Check-In',
-    FOREIGN KEY (id_hewan) REFERENCES hewan_peliharaan(id_hewan) ON DELETE RESTRICT,
-    FOREIGN KEY (id_kandang) REFERENCES kandang(id_kandang) ON DELETE RESTRICT
-) ENGINE=InnoDB;
-
--- 10. Antrean Layanan Grooming
-CREATE TABLE IF NOT EXISTS antrean_grooming (
-    id_grooming INT AUTO_INCREMENT PRIMARY KEY,
-    id_hewan INT NOT NULL,
-    id_groomer INT NOT NULL,
-    id_barang_layanan INT NOT NULL,
-    status_pengerjaan ENUM('Antre', 'Mandi', 'Pengeringan', 'Siap_Ambil', 'Selesai') NOT NULL DEFAULT 'Antre',
-    waktu_masuk DATETIME NOT NULL,
-    waktu_selesai DATETIME NULL,
-    catatan_kondisi TEXT NULL,
     id_penjualan INT NULL,
+    status_inap ENUM('Booking', 'Check-In', 'Menunggu_Pembayaran', 'Selesai', 'Batal') NOT NULL DEFAULT 'Check-In',
     FOREIGN KEY (id_hewan) REFERENCES hewan_peliharaan(id_hewan) ON DELETE RESTRICT,
-    FOREIGN KEY (id_groomer) REFERENCES users(id_user) ON DELETE RESTRICT,
-    FOREIGN KEY (id_barang_layanan) REFERENCES barang(id_barang) ON DELETE RESTRICT,
+    FOREIGN KEY (id_kandang) REFERENCES kandang(id_kandang) ON DELETE RESTRICT,
     FOREIGN KEY (id_penjualan) REFERENCES penjualan(id_penjualan) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -139,20 +135,6 @@ CREATE TABLE IF NOT EXISTS log_repack (
     FOREIGN KEY (id_barang_karung_asal) REFERENCES barang(id_barang) ON DELETE RESTRICT,
     FOREIGN KEY (id_barang_eceran_target) REFERENCES barang(id_barang) ON DELETE RESTRICT,
     FOREIGN KEY (id_admin) REFERENCES users(id_user) ON DELETE RESTRICT
-) ENGINE=InnoDB;
-
--- 12. Rekapitulasi Hak Komisi Staf
-CREATE TABLE IF NOT EXISTS komisi_groomer (
-    id_komisi INT AUTO_INCREMENT PRIMARY KEY,
-    id_user_groomer INT NOT NULL,
-    id_penjualan INT NOT NULL,
-    id_barang_layanan INT NOT NULL,
-    persentase_komisi DECIMAL(5,2) NOT NULL,
-    nominal_komisi DECIMAL(12,2) NOT NULL,
-    tgl_transaksi DATETIME NOT NULL,
-    FOREIGN KEY (id_user_groomer) REFERENCES users(id_user) ON DELETE RESTRICT,
-    FOREIGN KEY (id_penjualan) REFERENCES penjualan(id_penjualan) ON DELETE CASCADE,
-    FOREIGN KEY (id_barang_layanan) REFERENCES barang(id_barang) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 -- 13. Vendor & Pasokan Masuk
@@ -197,8 +179,7 @@ CREATE TABLE IF NOT EXISTS pengaturan (
 -- Default Internal Users (Password: password)
 INSERT INTO users (id_user, nama, username, password, role) VALUES
 (1, 'Administrator PetCare', 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin'),
-(2, 'Sarah Kasir', 'kasir1', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'kasir'),
-(3, 'Dedi Groomer', 'groomer1', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'groomer')
+(2, 'Sarah Kasir', 'kasir1', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'kasir')
 ON DUPLICATE KEY UPDATE nama=VALUES(nama);
 
 -- Default Settings
@@ -207,7 +188,6 @@ INSERT INTO pengaturan (kunci, nilai) VALUES
 ('alamat_toko', 'Jl. Pet Kingdom No. 45, Jakarta'),
 ('telepon_toko', '0812-3456-7890'),
 ('email_toko', 'contact@petcare.id'),
-('persentase_komisi_groomer', '20'),
 ('tarif_denda_overstay_per_jam', '15000'),
 ('footer_struk', 'Terima kasih atas kepercayaan Anda pada PetCare! Sehat selalu untuk anabul.'),
 ('warna_primary', '#0284c7'),
@@ -225,7 +205,6 @@ INSERT INTO kategori_barang (id_kategori, nama_kategori) VALUES
 (1, 'Pakan Kucing (Dry Food)'),
 (2, 'Pakan Anjing (Dry Food)'),
 (3, 'Wet Food & Treat'),
-(4, 'Layanan Grooming'),
 (5, 'Pet Hotel & Fasilitas'),
 (6, 'Obat, Vitamin & Perawatan')
 ON DUPLICATE KEY UPDATE nama_kategori=VALUES(nama_kategori);
@@ -246,7 +225,7 @@ INSERT INTO vendor (id_vendor, nama_vendor, kontak) VALUES
 (2, 'CV. Pet Supply Indonesia', '081299887766')
 ON DUPLICATE KEY UPDATE nama_vendor=VALUES(nama_vendor);
 
--- Default Products & Services
+-- Default Products & Hotel Items
 INSERT INTO barang (id_barang, id_kategori, kode_barang, nama_barang, tipe_item, stok, berat_gram, harga_beli, harga_jual) VALUES
 -- Karung Asal Repack
 (1, 1, 'RC-BABY-10KG', 'Royal Canin Mother & Babycat Sack 10kg', 'retail', 8, 10000, 850000.00, 1050000.00),
@@ -259,16 +238,16 @@ INSERT INTO barang (id_barang, id_kategori, kode_barang, nama_barang, tipe_item,
 (6, 3, 'WHISK-POUCH-TUNA', 'Whiskas Pouch Tuna 85g', 'retail', 80, 85, 6000.00, 8500.00),
 (7, 3, 'PEDIGREE-CAN-BEEF', 'Pedigree Can Beef 400g', 'retail', 35, 400, 22000.00, 29000.00),
 (8, 6, 'SHP-ANTI-KUTU-250', 'Shampoo Anti Kutu Kucing & Anjing 250ml', 'retail', 20, 250, 35000.00, 52000.00),
--- Layanan Grooming (Jasa)
-(9, 4, 'GRM-BASIC', 'Grooming Mandi Dasar (Shampoo, Potong Kuku, Bersih Telinga)', 'jasa', 999, 0, 0.00, 60000.00),
-(10, 4, 'GRM-KUTU-JAMUR', 'Grooming Khusus Kutu & Jamur (Medicated Shampoo)', 'jasa', 999, 0, 0.00, 85000.00),
-(11, 4, 'GRM-VIP', 'Grooming Lengkap VIP (Styling Haircut, Spa & Aroma)', 'jasa', 999, 0, 0.00, 135000.00),
 -- Item Fasilitas Kamar (Kandang)
 (12, 5, 'KND-SMALL-DAY', 'Inap Hotel Kamar Small (Per Malam)', 'kandang', 999, 0, 0.00, 50000.00),
 (13, 5, 'KND-MED-DAY', 'Inap Hotel Kamar Medium (Per Malam)', 'kandang', 999, 0, 0.00, 75000.00),
 (14, 5, 'KND-LRG-DAY', 'Inap Hotel Kamar Large (Per Malam)', 'kandang', 999, 0, 0.00, 110000.00),
 (15, 5, 'KND-VIP-DAY', 'Inap Hotel Kamar VIP AC (Per Malam)', 'kandang', 999, 0, 0.00, 175000.00)
 ON DUPLICATE KEY UPDATE nama_barang=VALUES(nama_barang), harga_jual=VALUES(harga_jual);
+
+INSERT INTO barang (id_kategori, kode_barang, nama_barang, tipe_item, stok, berat_gram, harga_beli, harga_jual)
+VALUES (5, 'HOTEL-SETTLE', 'Pelunasan Pet Hotel', 'kandang', 999, 0, 0.00, 0.00)
+ON DUPLICATE KEY UPDATE nama_barang=VALUES(nama_barang), tipe_item=VALUES(tipe_item), harga_jual=VALUES(harga_jual);
 
 -- Demo Customer (Password: password)
 INSERT INTO customer (id_customer, nama_customer, telepon, alamat, password, is_active) VALUES
@@ -278,7 +257,7 @@ ON DUPLICATE KEY UPDATE nama_customer=VALUES(nama_customer);
 
 -- Demo Pets
 INSERT INTO hewan_peliharaan (id_hewan, id_customer, nama_hewan, spesies, ras, tanggal_lahir, berat_badan, catatan_alergi, catatan_kebiasaan) VALUES
-(1, 1, 'Milo', 'Kucing', 'Persia Peaknose', '2023-02-10', 4.10, 'Alergi ayam & seafood, gunakan pakan hypoallergenic', 'Suka dielus bawah dagu, agak takut bunyi pengering rambut terlalu keras'),
+(1, 1, 'Milo', 'Kucing', 'Persia Peaknose', '2023-02-10', 4.10, 'Alergi ayam & seafood, gunakan pakan hypoallergenic', 'Suka dielus bawah dagu, agak takut suara keras'),
 (2, 1, 'Bobby', 'Anjing', 'Poodle Mini', '2022-08-15', 5.30, 'Tidak ada alergi', 'Sangat lincah, senang bermain bola'),
 (3, 2, 'Cleo', 'Kucing', 'British Shorthair', '2023-05-20', 3.85, 'Sensitif sampo wangi kuat, pakai sampo oat', 'Tenang dan suka tidur di tempat tinggi')
 ON DUPLICATE KEY UPDATE nama_hewan=VALUES(nama_hewan);

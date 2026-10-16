@@ -9,7 +9,7 @@ class Barang {
     public $kategori_id; // alias
     public $kode_barang;
     public $nama_barang;
-    public $tipe_item = 'retail'; // 'retail', 'repack', 'jasa', 'kandang'
+    public $tipe_item = 'retail'; // 'retail', 'repack', 'kandang'
     public $stok = 0;
     public $berat_gram = 0;
     public $harga_beli = 0.00;
@@ -29,6 +29,9 @@ class Barang {
             $this->berat_gram = (int)($data['berat_gram'] ?? 0);
             $this->harga_beli = (float)($data['harga_beli'] ?? 0);
             $this->harga_jual = (float)($data['harga_jual'] ?? 0);
+        }
+        if (!in_array($this->tipe_item, ['retail', 'repack', 'kandang'], true)) {
+            return false;
         }
 
         $query = "INSERT INTO " . $this->table_name . "
@@ -62,8 +65,9 @@ class Barang {
                   FROM " . $this->table_name . " b
                   LEFT JOIN kategori_barang k ON b.id_kategori = k.id_kategori ";
 
+        $query .= " WHERE b.tipe_item IN ('retail', 'repack', 'kandang') ";
         if (!empty($tipe_item)) {
-            $query .= " WHERE b.tipe_item = :tipe_item ";
+            $query .= " AND b.tipe_item = :tipe_item ";
         }
         $query .= " ORDER BY b.id_barang DESC";
 
@@ -73,10 +77,6 @@ class Barang {
         }
         $stmt->execute();
         return $stmt;
-    }
-
-    public function getServices() {
-        return $this->readAll('jasa');
     }
 
     public function getRetailAndRepack() {
@@ -155,6 +155,9 @@ class Barang {
             $this->harga_beli = isset($data['harga_beli']) ? (float)$data['harga_beli'] : $this->harga_beli;
             $this->harga_jual = isset($data['harga_jual']) ? (float)$data['harga_jual'] : $this->harga_jual;
         }
+        if (!in_array($this->tipe_item, ['retail', 'repack', 'kandang'], true)) {
+            return false;
+        }
 
         $query = "UPDATE " . $this->table_name . "
                   SET id_kategori=:id_kategori, kode_barang=:kode_barang, 
@@ -211,6 +214,20 @@ class Barang {
         $stmt->execute();
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row['total'] ?? 0;
+    }
+
+    public function getPakanStockStats($threshold = 5) {
+        $query = "SELECT COALESCE(SUM(b.stok), 0) AS total_unit,
+                         COUNT(*) AS total_sku,
+                         COALESCE(SUM(CASE WHEN b.stok <= :threshold THEN 1 ELSE 0 END), 0) AS sku_menipis
+                  FROM " . $this->table_name . " b
+                  JOIN kategori_barang k ON b.id_kategori = k.id_kategori
+                  WHERE b.tipe_item IN ('retail', 'repack')
+                    AND (k.nama_kategori LIKE '%Pakan%' OR k.nama_kategori LIKE '%Food%')";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindValue(':threshold', (int)$threshold, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     public function search($keyword, $tipe_item = null) {

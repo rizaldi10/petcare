@@ -5,8 +5,8 @@ let currentCategory = 'all';
 function addToCart(item) {
     const existingIndex = cart.findIndex(c => c.id_barang === item.id_barang);
     if (existingIndex > -1) {
-        if (cart[existingIndex].booked_queue_id) {
-            alert('Layanan dari booking pelanggan sudah otomatis masuk ke transaksi.');
+        if (cart[existingIndex].booked_queue_id || cart[existingIndex].stay_checkout_id) {
+            alert('Layanan dari booking atau checkout inap sudah otomatis masuk ke transaksi.');
             return;
         }
         if (item.tipe_item === 'retail' || item.tipe_item === 'repack') {
@@ -34,7 +34,7 @@ function addToCart(item) {
 }
 
 function updateCartQty(index, newQty) {
-    if (cart[index] && cart[index].booked_queue_id) return;
+    if (cart[index] && cart[index].stay_checkout_id) return;
     newQty = parseInt(newQty);
     if (newQty <= 0) {
         removeFromCart(index);
@@ -45,18 +45,15 @@ function updateCartQty(index, newQty) {
 }
 
 function removeFromCart(index) {
-    if (cart[index] && cart[index].booked_queue_id) return;
+    if (cart[index] && cart[index].stay_checkout_id) return;
     cart.splice(index, 1);
     renderCart();
 }
 
 function clearCart() {
-    if (typeof selectGroomingBooking === 'function') {
-        const bookingSelect = document.getElementById('pendingGroomingSelect');
-        if (bookingSelect && bookingSelect.value) {
-            bookingSelect.value = '';
-            selectGroomingBooking('');
-        }
+    if (typeof activeStayCheckoutId !== 'undefined' && activeStayCheckoutId) {
+        window.location.href = 'booking_inap.php';
+        return;
     }
     cart = [];
     renderCart();
@@ -66,38 +63,31 @@ function renderCart() {
     const cartItemsEl = document.getElementById('cartItems');
     const totalBayarEl = document.getElementById('totalBayarDisplay');
     const cartInputEl = document.getElementById('cartInput');
-    const serviceAlertEl = document.getElementById('serviceAlert');
-
     if (!cartItemsEl) return;
 
     if (cart.length === 0) {
         cartItemsEl.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 30px;">Keranjang kosong. Klik produk di sebelah kiri untuk menambahkan.</div>';
         totalBayarEl.innerText = 'Rp 0';
         cartInputEl.value = JSON.stringify([]);
-        if (serviceAlertEl) serviceAlertEl.style.display = 'none';
         return;
     }
 
     let total = 0;
-    let hasGroomingService = false;
     let html = '';
 
     cart.forEach((item, idx) => {
         const subtotal = item.harga_satuan * item.jumlah;
         total += subtotal;
-        if (item.tipe_item === 'jasa') {
-            hasGroomingService = true;
-        }
-
-        const bookedLabel = item.booked_queue_id
-            ? '<span class="badge badge-success" style="font-size: 0.7rem;">Dari booking customer</span>'
+        const isLocked = item.stay_checkout_id;
+        const lockedLabel = item.stay_checkout_id
+            ? '<span class="badge badge-success" style="font-size: 0.7rem;">Pelunasan inap</span>'
             : '';
-        const quantityControls = item.booked_queue_id
-            ? '<span style="font-weight: bold; width: 25px; text-align: center;">1</span>'
+        const quantityControls = isLocked
+            ? `<span style="font-weight: bold; width: 25px; text-align: center;">${item.jumlah}</span>`
             : `<button type="button" class="btn btn-sm btn-secondary" onclick="updateCartQty(${idx}, ${item.jumlah - 1})">-</button>
                <span style="font-weight: bold; width: 25px; text-align: center;">${item.jumlah}</span>
                <button type="button" class="btn btn-sm btn-secondary" onclick="updateCartQty(${idx}, ${item.jumlah + 1})">+</button>`;
-        const removeButton = item.booked_queue_id
+        const removeButton = isLocked
             ? ''
             : `<button type="button" onclick="removeFromCart(${idx})" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 5px 8px; margin-left: 5px; font-size: 1.1rem;">&times;</button>`;
 
@@ -106,8 +96,7 @@ function renderCart() {
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 0.95rem; color: #1e293b;">
                         ${item.nama_barang}
-                        ${item.tipe_item === 'jasa' ? '<span class="badge badge-info" style="font-size: 0.7rem;">Jasa Grooming</span>' : ''}
-                        ${bookedLabel}
+                        ${lockedLabel}
                     </div>
                     <div style="font-size: 0.85rem; color: #64748b;">
                         Rp ${item.harga_satuan.toLocaleString('id-ID')}
@@ -127,10 +116,6 @@ function renderCart() {
     cartItemsEl.innerHTML = html;
     totalBayarEl.innerText = 'Rp ' + total.toLocaleString('id-ID');
     cartInputEl.value = JSON.stringify(cart);
-
-    if (serviceAlertEl) {
-        serviceAlertEl.style.display = hasGroomingService ? 'block' : 'none';
-    }
 
     calculateChange();
 }

@@ -19,16 +19,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'create') {
         if ($barangModel->create($_POST)) {
-            $message = 'Item produk / layanan berhasil ditambahkan!';
+            $message = 'Produk berhasil ditambahkan!';
             $message_type = 'success';
         } else {
-            $message = 'Gagal menambahkan item. Pastikan kode barang unik.';
+            $message = 'Gagal menambahkan produk. Pastikan kode barang unik dan tipenya valid.';
             $message_type = 'error';
         }
     } elseif ($action === 'update') {
         $id = (int)$_POST['id_barang'];
         if ($barangModel->update($id, $_POST)) {
-            $message = 'Data produk / layanan berhasil diperbarui!';
+            $message = 'Data produk berhasil diperbarui!';
             $message_type = 'success';
         } else {
             $message = 'Gagal memperbarui data.';
@@ -55,7 +55,7 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Master Produk & Layanan - <?php echo APP_NAME; ?></title>
+    <title>Master Produk - <?php echo APP_NAME; ?></title>
     <?php require_once 'head_inc.php'; ?>
 </head>
 <body>
@@ -70,8 +70,8 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
             <div class="content">
                 <div class="page-header">
                     <div>
-                        <h1 class="page-title"><i class="bi bi-tags-fill"></i> Master Produk & Layanan</h1>
-                        <div class="breadcrumb-nav">Kelola Katalog Ritel Karung, Pakan Repack, Jasa Grooming & Kamar</div>
+                        <h1 class="page-title"><i class="bi bi-tags-fill"></i> Master Produk</h1>
+                        <div class="breadcrumb-nav">Kelola katalog produk ritel, pakan repack, dan item kamar</div>
                     </div>
                     <div class="page-actions">
                         <?php if ($role === 'admin'): ?>
@@ -90,7 +90,6 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                     <a href="barang.php" class="btn btn-sm <?php echo empty($tipe_filter) ? 'btn-primary' : 'btn-secondary'; ?>">Semua Tipe</a>
                     <a href="barang.php?tipe=retail" class="btn btn-sm <?php echo ($tipe_filter === 'retail') ? 'btn-primary' : 'btn-secondary'; ?>">Ritel / Karung</a>
                     <a href="barang.php?tipe=repack" class="btn btn-sm <?php echo ($tipe_filter === 'repack') ? 'btn-primary' : 'btn-secondary'; ?>">Repack Eceran</a>
-                    <a href="barang.php?tipe=jasa" class="btn btn-sm <?php echo ($tipe_filter === 'jasa') ? 'btn-primary' : 'btn-secondary'; ?>">✂️ Jasa Grooming</a>
                     <a href="barang.php?tipe=kandang" class="btn btn-sm <?php echo ($tipe_filter === 'kandang') ? 'btn-primary' : 'btn-secondary'; ?>">🏨 Item Kamar</a>
                 </div>
 
@@ -102,7 +101,7 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                         <thead>
                             <tr>
                                 <th>Kode</th>
-                                <th>Nama Produk / Layanan</th>
+                                <th>Nama Produk</th>
                                 <th>Kategori</th>
                                 <th>Tipe</th>
                                 <th>Berat (gr)</th>
@@ -122,14 +121,14 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                                     <span class="badge badge-<?php 
                                         echo ($row['tipe_item'] === 'retail') ? 'primary' : 
                                              (($row['tipe_item'] === 'repack') ? 'warning' : 
-                                             (($row['tipe_item'] === 'jasa') ? 'info' : 'secondary')); 
+                                             'secondary');
                                     ?>">
                                         <?php echo strtoupper($row['tipe_item']); ?>
                                     </span>
                                 </td>
                                 <td><?php echo $row['berat_gram'] ? number_format($row['berat_gram'], 0, ',', '.') . ' g' : '-'; ?></td>
                                 <td>
-                                    <?php if ($row['tipe_item'] === 'jasa' || $row['tipe_item'] === 'kandang'): ?>
+                                    <?php if ($row['tipe_item'] === 'kandang'): ?>
                                         <span style="color: #64748b;">Unlimited</span>
                                     <?php else: ?>
                                         <strong style="<?php echo ($row['stok'] <= 5) ? 'color: #ef4444;' : ''; ?>">
@@ -166,7 +165,7 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
     <div id="itemModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
         <div class="modal-content" style="background: white; border-radius: 12px; width: 100%; max-width: 550px; padding: 25px; max-height: 90vh; overflow-y: auto;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 id="modalTitle" style="margin: 0;">Tambah Produk / Layanan Baru</h3>
+                <h3 id="modalTitle" style="margin: 0;">Tambah Produk Baru</h3>
                 <button type="button" onclick="closeModal()" style="background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
             </div>
             <form method="POST" id="itemForm">
@@ -183,14 +182,13 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
                         <select id="tipe_item" name="tipe_item" class="form-control">
                             <option value="retail">Ritel (Kemasan Pabrik / Karung)</option>
                             <option value="repack">Repack (Hasil Pecahan Eceran Toko)</option>
-                            <option value="jasa">Jasa Grooming (Layanan Salon)</option>
                             <option value="kandang">Fasilitas Hotel (Kandang)</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="nama_barang">Nama Produk / Layanan</label>
+                    <label for="nama_barang">Nama Produk</label>
                     <input type="text" id="nama_barang" name="nama_barang" required class="form-control" placeholder="Contoh: Royal Canin Mother & Babycat 10kg">
                 </div>
 
@@ -236,7 +234,7 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
 
     <script>
         function openAddModal() {
-            document.getElementById('modalTitle').innerText = 'Tambah Produk / Layanan Baru';
+            document.getElementById('modalTitle').innerText = 'Tambah Produk Baru';
             document.getElementById('formAction').value = 'create';
             document.getElementById('id_barang').value = '';
             document.getElementById('kode_barang').value = '';
@@ -250,7 +248,7 @@ $categories = $kategoriModel->readAll()->fetchAll(PDO::FETCH_ASSOC);
         }
 
         function openEditModal(item) {
-            document.getElementById('modalTitle').innerText = 'Edit Data Produk / Layanan';
+            document.getElementById('modalTitle').innerText = 'Edit Data Produk';
             document.getElementById('formAction').value = 'update';
             document.getElementById('id_barang').value = item.id_barang;
             document.getElementById('kode_barang').value = item.kode_barang;

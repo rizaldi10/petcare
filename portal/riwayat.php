@@ -30,7 +30,6 @@ $history = $penjualanModel->getCustomerHistory($customer_id);
             <a href="index.php" class="portal-link">Beranda</a>
             <a href="my_pets.php" class="portal-link">Anabul Saya</a>
             <a href="booking.php" class="portal-link">Booking Online</a>
-            <a href="track.php" class="portal-link">Pantau Perawatan (Live)</a>
             <a href="riwayat.php" class="portal-link active">Riwayat Struk</a>
             <a href="index.php?action=logout" class="portal-link" style="color: #ef4444;">Keluar</a>
         </div>
@@ -38,7 +37,7 @@ $history = $penjualanModel->getCustomerHistory($customer_id);
 
     <div class="portal-container">
         <h2 style="margin: 0 0 5px 0; color: #0f172a;">Arsip Transaksi & Struk Digital</h2>
-        <p style="margin: 0 0 20px 0; color: #64748b;">Lihat arsip pembelian pakan, obat, layanan salon, dan penginapan anabul Anda.</p>
+        <p style="margin: 0 0 20px 0; color: #64748b;">Lihat arsip pembelian produk dan penginapan anabul Anda.</p>
 
         <div class="portal-card">
             <div style="overflow-x: auto;">
@@ -60,7 +59,7 @@ $history = $penjualanModel->getCustomerHistory($customer_id);
                             <td style="padding: 12px 10px;"><?php echo htmlspecialchars($h['kasir']); ?></td>
                             <td style="padding: 12px 10px;"><strong><?php echo formatCurrency($h['total_bayar']); ?></strong></td>
                             <td style="padding: 12px 10px; text-align: right;">
-                                <a href="../struk.php?id=<?php echo $h['id_penjualan']; ?>" target="_blank" class="portal-btn" style="padding: 6px 14px; font-size: 0.85rem;">
+                                <a href="../struk.php?id=<?php echo (int)$h['id_penjualan']; ?>&amp;view=customer" target="_blank" class="portal-btn" style="padding: 6px 14px; font-size: 0.85rem;">
                                     Buka Struk Digital ↗
                                 </a>
                             </td>

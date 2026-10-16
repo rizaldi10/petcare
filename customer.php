@@ -1,6 +1,6 @@
 <?php
 require_once 'config/config.php';
-requireRole(['admin', 'kasir', 'groomer']);
+requireRole(['admin', 'kasir']);
 
 require_once 'models/Customer.php';
 require_once 'models/Hewan.php';

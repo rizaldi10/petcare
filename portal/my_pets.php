@@ -77,7 +77,6 @@ $my_pets = $customerModel->getPets($customer_id);
             <a href="index.php" class="portal-link">Beranda</a>
             <a href="my_pets.php" class="portal-link active">Anabul Saya</a>
             <a href="booking.php" class="portal-link">Booking Online</a>
-            <a href="track.php" class="portal-link">Pantau Perawatan (Live)</a>
             <a href="riwayat.php" class="portal-link">Riwayat Struk</a>
             <a href="index.php?action=logout" class="portal-link" style="color: #ef4444;">Keluar</a>
         </div>
@@ -136,9 +135,6 @@ $my_pets = $customerModel->getPets($customer_id);
                 <div style="margin-top: 15px; border-top: 1px solid #f1f5f9; padding-top: 12px; display: flex; gap: 10px;">
                     <a href="booking.php?pet_id=<?php echo $pet['id_hewan']; ?>" class="portal-btn" style="flex: 1; text-align: center; font-size: 0.85rem; padding: 8px;">
                         Booking Kamar
-                    </a>
-                    <a href="track.php?pet_id=<?php echo $pet['id_hewan']; ?>" class="portal-btn portal-btn-secondary" style="flex: 1; text-align: center; font-size: 0.85rem; padding: 8px;">
-                        Status Perawatan
                     </a>
                 </div>
             </div>

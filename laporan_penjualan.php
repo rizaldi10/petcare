@@ -7,13 +7,19 @@ require_once 'models/Penjualan.php';
 $database = new Database();
 $db = $database->getConnection();
 $penjualan = new Penjualan($db);
+$role = $_SESSION['user_role'];
+$today = date('Y-m-d');
 
 // Get filter parameters
-$start_date = $_GET['start_date'] ?? date('Y-m-01');
-$end_date = $_GET['end_date'] ?? date('Y-m-d');
+$default_start_date = ($role === 'kasir') ? $today : date('Y-m-01');
+$report_date = ($role === 'kasir') ? ($_GET['date'] ?? $today) : null;
+$start_date = ($role === 'kasir') ? $report_date : ($_GET['start_date'] ?? $default_start_date);
+$end_date = ($role === 'kasir') ? $report_date : ($_GET['end_date'] ?? $today);
+$is_today_report = ($start_date === $today && $end_date === $today);
 
 // Get laporan data
 $stmt = $penjualan->getLaporanPenjualan($start_date, $end_date);
+$revenue_breakdown = $penjualan->getRevenueBreakdown($start_date, $end_date);
 
 $total_penjualan = 0;
 $total_transaksi = 0;
@@ -36,7 +42,6 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 <body>
     <div class="main-container">
         <?php 
-        $role = $_SESSION['user_role'];
         require_once 'sidebar.php'; 
         ?>
         <main class="main-content">
@@ -45,8 +50,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             <div class="content">
                 <div class="page-header">
                     <div>
-                        <h1 class="page-title"><i class="bi bi-graph-up-arrow"></i> Laporan Transaksi Penjualan & Layanan</h1>
-                        <div class="breadcrumb-nav">Rekapitulasi Omzet Ritel Produk, Paket Grooming & Tarif Pet Hotel</div>
+                        <h1 class="page-title"><i class="bi bi-graph-up-arrow"></i> <?php echo $role === 'kasir' ? 'Laporan Penjualan Kasir' : 'Laporan Penjualan & Pet Hotel'; ?></h1>
+                        <div class="breadcrumb-nav">Rekapitulasi omzet produk ritel dan tarif Pet Hotel</div>
                     </div>
                 </div>
 
@@ -54,6 +59,12 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 <div class="data-card" style="margin-bottom: 25px;">
                     <div class="data-card-body">
                         <form method="GET" style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                            <?php if ($role === 'kasir'): ?>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="date">Tanggal Transaksi</label>
+                                <input type="date" id="date" name="date" value="<?php echo htmlspecialchars($report_date); ?>" class="form-control" required>
+                            </div>
+                            <?php else: ?>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label for="start_date">Dari Tanggal</label>
                                 <input type="date" id="start_date" name="start_date" value="<?php echo $start_date; ?>" class="form-control" required>
@@ -62,44 +73,49 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                                 <label for="end_date">Sampai Tanggal</label>
                                 <input type="date" id="end_date" name="end_date" value="<?php echo $end_date; ?>" class="form-control" required>
                             </div>
+                            <?php endif; ?>
                             <button type="submit" class="btn btn-primary"><i class="bi bi-funnel"></i> Filter Periode</button>
                             <button type="button" onclick="window.print()" class="btn btn-secondary"><i class="bi bi-printer"></i> Cetak Rekap</button>
                         </form>
                     </div>
                 </div>
 
-                <!-- Summary Cards (Adminator Spec 4.3) -->
-                <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr) !important; margin-bottom: 25px;">
+                <!-- Ringkasan omzet kasir hanya ditampilkan untuk tanggal hari ini. -->
+                <?php if ($role !== 'kasir' || $is_today_report): ?>
+                <div class="stats-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr)) !important; margin-bottom: 25px;">
                     <div class="stat-card card-success">
                         <div class="stat-icon bg-success-soft">
                             <i class="bi bi-cash-stack"></i>
                         </div>
                         <div class="stat-details">
-                            <span class="stat-label">Total Omzet Penjualan</span>
+                            <span class="stat-label"><?php echo $role === 'kasir' ? 'Total Omzet Hari Ini' : 'Total Omzet'; ?></span>
                             <div class="stat-value"><?php echo formatCurrency($total_penjualan); ?></div>
                         </div>
                     </div>
-                    <div class="stat-card card-primary">
-                        <div class="stat-icon bg-primary-soft">
-                            <i class="bi bi-receipt"></i>
+                    <div class="stat-card card-success">
+                        <div class="stat-icon bg-success-soft">
+                            <i class="bi bi-bag"></i>
                         </div>
                         <div class="stat-details">
-                            <span class="stat-label">Total Transaksi</span>
-                            <div class="stat-value"><?php echo $total_transaksi; ?> Transaksi</div>
+                            <span class="stat-label">Omzet POS</span>
+                            <div class="stat-value"><?php echo formatCurrency((float)($revenue_breakdown['omzet_produk'] ?? 0)); ?></div>
                         </div>
                     </div>
                     <div class="stat-card card-info">
                         <div class="stat-icon bg-info-soft">
-                            <i class="bi bi-calculator"></i>
+                            <i class="bi bi-house-heart"></i>
                         </div>
                         <div class="stat-details">
-                            <span class="stat-label">Rata-rata Transaksi</span>
-                            <div class="stat-value">
-                                <?php echo formatCurrency($total_transaksi > 0 ? ($total_penjualan / $total_transaksi) : 0); ?>
-                            </div>
+                            <span class="stat-label">Omzet Penitipan</span>
+                            <div class="stat-value"><?php echo formatCurrency((float)($revenue_breakdown['omzet_penitipan'] ?? 0)); ?></div>
                         </div>
                     </div>
                 </div>
+                <?php elseif ($role === 'kasir'): ?>
+                    <div class="alert alert-info" style="margin-bottom: 25px;">
+                        Menampilkan transaksi periode terpilih. Ringkasan omzet hanya tersedia untuk tanggal hari ini.
+                    </div>
+                <?php endif; ?>
 
                 <!-- Laporan Table -->
                 <div class="data-card">

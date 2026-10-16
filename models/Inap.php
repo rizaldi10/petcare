@@ -101,35 +101,58 @@ class Inap {
     }
 
     public function checkOut($id_inap, $final_total = null, $denda = null) {
+        // Checkout hanya menyiapkan tagihan; status selesai setelah transaksi POS dibayar.
+        return $this->prepareCheckout($id_inap);
+    }
+
+    public function prepareCheckout($id_inap, $hourly_rate = 15000) {
         $row = $this->readOne($id_inap);
-        if (!$row) return false;
+        if (!$row || $row['status_inap'] !== 'Check-In') return false;
 
-        if ($final_total === null) {
-            $bill = $this->calculateBill($id_inap);
-            $final_total = $bill['total_biaya_akhir'];
-            $denda = $bill['denda_overstay'];
-        }
+        $bill = $this->calculateBill($id_inap, $hourly_rate);
+        if (!$bill) return false;
 
-        $query = "UPDATE " . $this->table_name . " 
-                  SET status_inap = 'Selesai', 
-                      tgl_aktual_keluar = NOW(), 
-                      biaya_denda_overstay = :denda, 
-                      total_biaya_akhir = :total 
-                  WHERE id_inap = :id";
-
+        $query = "UPDATE " . $this->table_name . "
+                  SET status_inap = 'Menunggu_Pembayaran',
+                      tgl_aktual_keluar = NOW(),
+                      biaya_denda_overstay = :denda,
+                      total_biaya_akhir = :total
+                  WHERE id_inap = :id AND status_inap = 'Check-In' AND id_penjualan IS NULL";
         $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':denda', $denda);
-        $stmt->bindParam(':total', $final_total);
-        $stmt->bindParam(':id', $id_inap);
+        $stmt->execute([
+            ':denda' => $bill['denda_overstay'],
+            ':total' => $bill['total_biaya_akhir'],
+            ':id' => $id_inap
+        ]);
 
-        if ($stmt->execute()) {
-            // Lepas kandang agar siap digunakan kembali
-            $upd = $this->conn->prepare("UPDATE kandang SET status_tersedia = 1 WHERE id_kandang = :id_kandang");
-            $upd->bindParam(':id_kandang', $row['id_kandang']);
-            $upd->execute();
-            return true;
+        return $stmt->rowCount() === 1;
+    }
+
+    public function completePaidCheckout($id_inap, $id_penjualan) {
+        $row = $this->readOne($id_inap);
+        if (!$row || $row['status_inap'] !== 'Menunggu_Pembayaran' || !empty($row['id_penjualan'])) {
+            return false;
         }
-        return false;
+
+        $query = "UPDATE " . $this->table_name . "
+                  SET status_inap = 'Selesai', id_penjualan = :sale
+                  WHERE id_inap = :id AND status_inap = 'Menunggu_Pembayaran' AND id_penjualan IS NULL";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([':sale' => $id_penjualan, ':id' => $id_inap]);
+        if ($stmt->rowCount() !== 1) return false;
+
+        $upd = $this->conn->prepare("UPDATE kandang SET status_tersedia = 1 WHERE id_kandang = :id_kandang");
+        $upd->execute([':id_kandang' => $row['id_kandang']]);
+        return true;
+    }
+
+    public function getPendingCheckout($id_inap) {
+        $row = $this->readOne($id_inap);
+        if (!$row || $row['status_inap'] !== 'Menunggu_Pembayaran' || !empty($row['id_penjualan'])) {
+            return false;
+        }
+        $row['sisa_bayar'] = max(0, (float)$row['total_biaya_akhir'] - (float)$row['uang_muka_dp']);
+        return $row;
     }
 
     public function cancelBooking($id_inap) {

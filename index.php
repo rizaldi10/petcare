@@ -107,7 +107,7 @@ if (isLoggedIn()) {
         <div style="font-size: 3.5rem; margin-bottom: 10px;">🐾</div>
         <h1><?php echo APP_NAME; ?></h1>
         <p>
-            Platform operasional all-in-one untuk toko ritel pakan, pemecahan karung (*repack*), manajemen antrean grooming berhak komisi, serta reservasi kamar inap (*pet hotel*) dengan kalkulasi denda penjemputan otomatis.
+            Platform operasional untuk toko ritel pakan, pemecahan karung (*repack*), serta reservasi kamar inap (*pet hotel*) dengan kalkulasi denda penjemputan otomatis.
         </p>
         <div class="hero-btns">
             <a href="login.php" class="btn-hero">
@@ -122,21 +122,13 @@ if (isLoggedIn()) {
         </div>
     </header>
 
-    <!-- 4 Pilar Fitur Utama -->
+    <!-- Fitur Utama -->
     <section class="features-grid">
         <div class="feature-card">
             <div class="feature-icon">🛒</div>
             <div class="feature-title">Kasir POS Hibrida & Repack</div>
             <div class="feature-desc">
                 Transaksi penjualan ritel terintegrasi dengan pemecahan karung pakan besar ke kemasan eceran dan pencatatan susut gram otomatis.
-            </div>
-        </div>
-
-        <div class="feature-card">
-            <div class="feature-icon">✂️</div>
-            <div class="feature-title">Papan Antrean Grooming</div>
-            <div class="feature-desc">
-                Kanban pengerjaan teknis salon anabul (Antre &rarr; Mandi &rarr; Kering &rarr; Siap Ambil) dengan rekap komisi otomatis per groomer.
             </div>
         </div>
 
@@ -152,7 +144,7 @@ if (isLoggedIn()) {
             <div class="feature-icon">📱</div>
             <div class="feature-title">Portal Mandiri Pelanggan</div>
             <div class="feature-desc">
-                Pendaftaran rekam alergi anabul, reservasi kamar & grooming daring, serta pelacakan progres perawatan salon secara live.
+                Pendaftaran profil anabul, reservasi kamar, serta riwayat transaksi pelanggan.
             </div>
         </div>
     </section>

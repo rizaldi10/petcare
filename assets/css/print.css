@@ -95,26 +95,6 @@ body.print-receipt {
     margin-top: 10px;
 }
 
-.pickup-ticket {
-    margin-top: 15px;
-    border: 2px dashed #000;
-    padding: 10px;
-    text-align: center;
-    background: #fdfdfd;
-}
-
-.pickup-ticket .ticket-title {
-    font-weight: bold;
-    font-size: 13px;
-    margin-bottom: 4px;
-}
-
-.pickup-ticket .ticket-number {
-    font-size: 20px;
-    font-weight: bold;
-    letter-spacing: 2px;
-}
-
 @media print {
     body.print-receipt {
         background: #fff;
